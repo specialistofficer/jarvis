@@ -1,0 +1,15 @@
+# Copy to .dev.vars. This file contains no real credentials.
+NVIDIA_API_KEY=
+DEV_TRIGGER_TOKEN=choose-a-private-local-token
+ENVIRONMENT=development
+DASHBOARD_ORIGIN=http://localhost:5173
+FOUNDER_EMAIL_SECRET=
+FOUNDER_PASSWORD_HASH=
+SESSION_SIGNING_SECRET=
+
+# Confirm this only while NVIDIA shows remaining free API allowance.
+NVIDIA_FREE_ALLOWANCE_REMAINING=false
+
+# Optional: enables deterministic local Scout output without calling an AI API.
+# Never enable this in production.
+DEV_MOCK_AI=true

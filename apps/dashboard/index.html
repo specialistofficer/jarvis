@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#07110f" />
+    <meta name="description" content="Jarvis — private voice and text founder operating assistant." />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/jarvis-mark.svg" type="image/svg+xml" />
+    <title>Jarvis — Founder HQ</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      if (location.protocol === "file:") {
+        document.getElementById("root").innerHTML = '<main style="max-width:680px;margin:12vh auto;padding:28px;font-family:system-ui;color:#f2f5f1;background:#101b18;border:1px solid #25332f;border-radius:18px"><h1>Jarvis needs the app server</h1><p style="color:#aeb9b5;line-height:1.7">This source index.html is not a standalone file. Run <code>npm run dev:dashboard</code> from the Jarvis folder and open <a style="color:#d7ff5f" href="http://localhost:5173">http://localhost:5173</a>, or use the deployed Pages URL.</p></main>';
+      }
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

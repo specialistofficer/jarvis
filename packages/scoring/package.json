@@ -1,0 +1,9 @@
+{
+  "name": "@jarvis/scoring",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": { "typecheck": "tsc --noEmit -p tsconfig.json" },
+  "dependencies": { "@jarvis/types": "0.1.0" }
+}

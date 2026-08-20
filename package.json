@@ -1,0 +1,30 @@
+{
+  "name": "jarvis",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@jarvis/worker",
+    "dev:dashboard": "npm run dev --workspace=@jarvis/dashboard",
+    "dev:worker": "npm run dev --workspace=@jarvis/worker",
+    "build": "npm run build --workspace=@jarvis/dashboard && npm run build --workspace=@jarvis/worker",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate:local": "wrangler d1 migrations apply jarvis-db --local --config apps/worker/wrangler.jsonc",
+    "db:migrate:remote": "wrangler d1 migrations apply jarvis-db --remote --env production --config apps/worker/wrangler.jsonc",
+    "cf:types": "npm run cf:types --workspace=@jarvis/worker"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.31.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

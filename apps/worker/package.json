@@ -1,0 +1,25 @@
+{
+  "name": "@jarvis/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "wrangler deploy --dry-run --env production --outdir dist",
+    "deploy": "wrangler deploy --env production",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "cf:types": "wrangler types src/worker-configuration.d.ts"
+  },
+  "dependencies": {
+    "@jarvis/ai": "0.1.0",
+    "@jarvis/scoring": "0.1.0",
+    "@jarvis/shared": "0.1.0",
+    "@jarvis/types": "0.1.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250820.0",
+    "typescript": "^5.9.2",
+    "wrangler": "^4.31.0"
+  }
+}

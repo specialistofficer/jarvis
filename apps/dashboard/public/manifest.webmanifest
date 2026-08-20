@@ -1,0 +1,12 @@
+{
+  "name": "Jarvis Founder HQ",
+  "short_name": "Jarvis",
+  "description": "Private voice and text founder operating assistant.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07110f",
+  "theme_color": "#07110f",
+  "icons": [
+    { "src": "/jarvis-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

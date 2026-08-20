@@ -1,0 +1,46 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jarvis-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-20",
+  "observability": { "enabled": true },
+  "vars": {
+    "ENVIRONMENT": "development",
+    "NVIDIA_MODEL": "meta/llama-3.1-8b-instruct",
+    "NVIDIA_FREE_ALLOWANCE_REMAINING": "false",
+    "DEV_MOCK_AI": "false",
+    "DASHBOARD_ORIGIN": "http://localhost:5173"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "jarvis-db",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "preview_database_id": "jarvis-local",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+  "triggers": { "crons": ["0 * * * *"] },
+  "env": {
+    "production": {
+      "name": "jarvis-api",
+      "vars": {
+        "ENVIRONMENT": "production",
+        "NVIDIA_MODEL": "meta/llama-3.1-8b-instruct",
+        "NVIDIA_FREE_ALLOWANCE_REMAINING": "true",
+        "DEV_MOCK_AI": "false",
+        "DASHBOARD_ORIGIN": "https://jarvis-founder-hq.pages.dev"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "jarvis-db",
+          "database_id": "cbe8c557-60f7-4378-8757-14a4bb7da95f",
+          "migrations_dir": "../../migrations"
+        }
+      ],
+      "triggers": { "crons": ["0 * * * *"] }
+    }
+  },
+  "dev": { "port": 8787 }
+}
