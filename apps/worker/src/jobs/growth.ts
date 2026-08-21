@@ -114,10 +114,16 @@ export async function runGrowthPlan(env: Env, jobId: string, payload: Record<str
   }
 
   const statements: D1PreparedStatement[] = [];
-  for (const asset of pack.assets) statements.push(env.DB.prepare(
-    `INSERT INTO growth_assets (id, goal_id, job_id, asset_type, channel, title, hook, body, cta, production_notes, source_urls_json, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')`,
-  ).bind(crypto.randomUUID(), goal.id, jobId, asset.assetType, asset.channel, asset.title, asset.hook, asset.body, asset.cta, asset.productionNotes, JSON.stringify(asset.sourceUrls)));
+  for (const asset of pack.assets) {
+    const assetId = crypto.randomUUID();
+    statements.push(env.DB.prepare(
+      `INSERT INTO growth_assets (id, goal_id, job_id, asset_type, channel, title, hook, body, cta, production_notes, source_urls_json, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')`,
+    ).bind(assetId, goal.id, jobId, asset.assetType, asset.channel, asset.title, asset.hook, asset.body, asset.cta, asset.productionNotes, JSON.stringify(asset.sourceUrls)));
+    statements.push(env.DB.prepare(
+      `INSERT INTO jobs (id, type, priority, payload, status) VALUES (?, 'media_production', 90, ?, 'queued')`
+    ).bind(crypto.randomUUID(), JSON.stringify({ growthAssetId: assetId })));
+  }
   for (const lead of pack.distributionLeads) statements.push(env.DB.prepare(
     `INSERT INTO growth_leads (id, goal_id, lead_type, name, source_url, why_relevant, next_action)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,

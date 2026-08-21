@@ -18,7 +18,7 @@ function decodeBase64(value: string): Uint8Array {
 }
 
 function visualPrompt(asset: GrowthAssetRow): string {
-  return `Premium editorial fashion campaign image for ClothMatics, an intelligent digital wardrobe product. ${asset.hook} Clean modern wardrobe scene, natural Indian urban context, warm daylight, deep forest green and soft cream palette, realistic clothing textures, elegant composition, no logos, no text, no watermark, no unsupported product UI.`;
+  return `Premium, high-tech, futuristic software agency image. Dark mode, sleek dashboard, neon accents, modern workspace. ${asset.hook} High quality, 8k resolution, photorealistic, cinematic lighting, no text, no watermark, clean composition.`;
 }
 
 async function tryNvidiaImage(env: Env, prompt: string): Promise<{ bytes: Uint8Array; model: string } | null> {
@@ -64,7 +64,7 @@ export async function runMediaProduction(env: Env, payload: Record<string, unkno
   const prompt = visualPrompt(asset);
   const spec = {
     title: asset.title, hook: asset.hook, body: asset.body, cta: asset.cta, channel: asset.channel,
-    productionNotes: asset.production_notes, brand: "ClothMatics", palette: { background: "#f3f6ef", primary: "#245f35", accent: "#b9ef62", text: "#17211d" },
+    productionNotes: asset.production_notes, brand: "Jarvis Tech Agency", palette: { background: "#0a0a0a", primary: "#00ffcc", accent: "#ffffff", text: "#e0e0e0" },
   };
   await env.DB.prepare(`INSERT INTO media_assets
     (id, growth_asset_id, goal_id, media_kind, format, width, height, duration_seconds, provider, prompt, spec_json, status, public_id)
