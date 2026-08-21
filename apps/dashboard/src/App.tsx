@@ -202,24 +202,29 @@ function DiagnosticView({ overview, onStatus, today }: any) {
     <div>
     <div className="panel">
       <div className="panel-title">Connected Resources</div>
+      
       <div className="list-item flex-between">
-        <div>
-          <strong>Google Drive</strong>
-          <p style={{fontSize: 12, color: 'var(--text-muted)'}}>Archive & Data Warehouse</p>
-        </div>
+        <div><strong>Google Drive</strong><p style={{fontSize: 12, color: 'var(--text-muted)'}}>Archive & Data Warehouse</p></div>
         <button onClick={async () => {
           try {
-            const res = await fetch(API_BASE + "/api/connections/google_drive/auth", {
-              headers: { "Authorization": "Bearer " + sessionStorage.getItem("jarvis_founder_token") }
-            });
+            const res = await fetch(API_BASE + "/api/connections/google_drive/auth", { headers: { "Authorization": "Bearer " + sessionStorage.getItem("jarvis_founder_token") } });
             const data = await res.json();
-            if (data.url) window.location.href = data.url;
-            else alert(data.error || "Failed to get auth URL");
-          } catch (err) {
-            alert("Error initiating OAuth");
-          }
+            if (data.url) window.location.href = data.url; else alert(data.error || "Failed to get auth URL");
+          } catch (err) { alert("Error initiating OAuth"); }
         }}>Connect</button>
       </div>
+
+      <div className="list-item flex-between">
+        <div><strong>YouTube</strong><p style={{fontSize: 12, color: 'var(--text-muted)'}}>Video Publishing & Analytics</p></div>
+        <button onClick={async () => {
+          try {
+            const res = await fetch(API_BASE + "/api/connections/youtube/auth", { headers: { "Authorization": "Bearer " + sessionStorage.getItem("jarvis_founder_token") } });
+            const data = await res.json();
+            if (data.url) window.location.href = data.url; else alert(data.error || "Failed to get auth URL");
+          } catch (err) { alert("Error initiating OAuth"); }
+        }}>Connect</button>
+      </div>
+      
     </div>
     <div className="panel">
       <div className="panel-title">Technical Diagnostics</div>
@@ -266,17 +271,19 @@ export function App() {
   }, []);
   useEffect(() => {
     const url = new URL(window.location.href);
-    if (url.pathname === "/oauth/callback/google_drive") {
+    const match = url.pathname.match(/^\/oauth\/callback\/([a-z_]+)$/);
+    if (match) {
+      const provider = match[1];
       const code = url.searchParams.get("code");
       if (code) {
-        fetch(API_BASE + "/api/connections/google_drive/callback", {
+        fetch(API_BASE + `/api/connections/${provider}/callback`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": "Bearer " + sessionStorage.getItem("jarvis_founder_token") },
-          body: JSON.stringify({ code, redirectUri: window.location.origin + "/oauth/callback/google_drive" })
+          body: JSON.stringify({ code, redirectUri: window.location.origin + `/oauth/callback/${provider}` })
         }).then(() => {
           window.location.href = "/";
         }).catch(() => {
-          alert("OAuth failed");
+          alert("OAuth failed for " + provider);
           window.location.href = "/";
         });
         return;
