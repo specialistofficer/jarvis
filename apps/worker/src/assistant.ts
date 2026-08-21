@@ -179,6 +179,7 @@ export async function chatWithAssistant(env: Env, message: string): Promise<{ re
   const activeJobs = jobs.results;
   const queued = activeJobs.filter((job) => job.status === "queued" || job.status === "deferred").length;
   const compactContext = {
+    currentTimeIST: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
     status: today.systemStatus,
     completedToday: today.jobsCompletedToday,
     failedToday: today.jobsFailedToday,
@@ -193,37 +194,6 @@ export async function chatWithAssistant(env: Env, message: string): Promise<{ re
   };
 
   let decision = directDecision(message, today.topOpportunity ? { id: today.topOpportunity.id, title: today.topOpportunity.title } : null);
-  if (!decision && isGrowthQuestion(message)) {
-    const totalAssets = growthAssets.results.reduce((sum, item) => sum + Number(item.count ?? 0), 0);
-    const ready = growthAssets.results.find((item) => item.status === "ready_to_publish");
-    decision = growthGoal ? {
-      reply: `Active growth goal “${String(growthGoal.name)}” hai. ${totalAssets} content plans created hain; ${Number(ready?.count ?? 0)} copy-approved aur media production ka wait kar rahe hain. Abhi generated images/videos ya connected publishing analytics nahi hain. Recorded outcome: ${Number(growthTotals?.clicks ?? 0)} clicks, ${Number(growthTotals?.installs ?? 0)} installs, ${Number(growthTotals?.leads ?? 0)} leads aur ₹${Number(growthTotals?.revenue_inr ?? 0)} revenue.`,
-      action: null,
-    } : { reply: "Growth Engine abhi initialize nahi hua. Founder confirmation ke baad ClothMatics growth pack create kiya ja sakta hai.", action: null };
-  }
-  if (!decision && isDeliverableQuestion(message)) {
-    const latest = deliverables.results[0];
-    decision = latest ? {
-      reply: `Latest deliverable “${String(latest.title)}” hai. Isme ${Number(latest.source_count ?? 0)} public sources hain. Status: ${String(latest.status)}. Result: ${String(latest.summary)} Deliverables page par findings, citations, competitors, experiment aur founder decision detail mein available hain.`,
-      action: null,
-    } : {
-      reply: "Abhi tak koi genuine research deliverable nahi bana. Main activity ko result nahi bolunga. Aap ‘run sourced research’ bolkar first evidence-backed brief queue kar sakte hain.",
-      action: null,
-    };
-  }
-  if (!decision && isStatusQuestion(message)) {
-    decision = {
-      reply: statusReply({
-        status: today.systemStatus,
-        completed: today.jobsCompletedToday,
-        failed: today.jobsFailedToday,
-        queued,
-        nextJob: activeJobs[0] ?? null,
-        top: today.topOpportunity,
-      }),
-      action: null,
-    };
-  }
 
   if (!decision) {
     const provider = selectAIProvider(env);
@@ -382,10 +352,84 @@ Base the confidence score on source quality, agreement between sources, freshnes
 Think like a capable executive assistant, researcher, developer, designer, and creative production agent—but operate strictly through the tools and permissions genuinely available to you.
 Your default mindset is:
 “Understand the goal, choose the right tools, perform the work, verify the result, and deliver something useful.”
-Do not merely discuss the task when you can complete it.`,
+Do not merely discuss the task when you can complete it.
+
+To execute actions, you must output a JSON object wrapped in \`\`\`json ... \`\`\` at the very end of your response.
+The JSON must follow this exact format:
+{
+  "tools": [
+    {
+      "name": "schedule_image_generation",
+      "arguments": { "prompt": "a cinematic photo of a neon city" }
+    },
+    {
+      "name": "schedule_outreach_campaign",
+      "arguments": { "query": "Dentists in NY" }
+    },
+    {
+      "name": "schedule_trend_scout",
+      "arguments": {}
+    },
+    {
+      "name": "run_heartbeat",
+      "arguments": {}
+    }
+  ]
+}
+If no action is needed, simply omit the JSON block entirely. Do not invent tools. Only use the ones provided above.`,
         `LATEST FOUNDER MESSAGE (answer this):\n${message}\n\nVERIFIED LIVE CONTEXT:\n${JSON.stringify(compactContext)}\n\nRECENT CONVERSATION FOR REFERENCE ONLY:\n${JSON.stringify(history.slice(-4))}`,
       );
-      decision = { reply: generated.trim().slice(0, 1800), action: null };
+      
+      let replyText = generated.trim();
+      let toolsToRun: any[] = [];
+      const jsonMatch = replyText.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+      if (jsonMatch) {
+        try {
+           const parsed = JSON.parse(jsonMatch[1]);
+           if (parsed.tools && Array.isArray(parsed.tools)) {
+             toolsToRun = parsed.tools;
+           }
+           replyText = replyText.replace(jsonMatch[0], "").trim();
+        } catch (e) {
+           console.error("Failed to parse LLM tools", e);
+        }
+      }
+
+      // Execute extracted tools
+      const statements = [];
+      for (const tool of toolsToRun) {
+         if (tool.name === "schedule_image_generation") {
+            const assetId = crypto.randomUUID();
+            statements.push(env.DB.prepare(
+              `INSERT INTO growth_assets (id, goal_id, job_id, asset_type, channel, title, hook, body, cta, production_notes, status)
+               VALUES (?, 'goal_agency_v1', 'jarvis_assistant', 'image', 'Website', ?, ?, ?, ?, ?, 'draft')`
+            ).bind(assetId, `AI Generated Image`, `Requested by founder`, `Prompt: ${tool.arguments.prompt}`, ``, `Asset created by Jarvis`));
+            
+            statements.push(env.DB.prepare(
+              `INSERT INTO jobs (id, type, priority, payload, status, scheduled_at) VALUES (?, 'media_production', 90, ?, 'queued', datetime('now'))`
+            ).bind(crypto.randomUUID(), JSON.stringify({ growthAssetId: assetId })));
+         }
+         else if (tool.name === "schedule_outreach_campaign") {
+            statements.push(env.DB.prepare(
+              `INSERT INTO jobs (id, type, priority, payload, status, scheduled_at) VALUES (?, 'outreach_scout', 100, ?, 'queued', datetime('now'))`
+            ).bind(crypto.randomUUID(), JSON.stringify({ query: tool.arguments.query })));
+         }
+         else if (tool.name === "schedule_trend_scout") {
+            statements.push(env.DB.prepare(
+              `INSERT INTO jobs (id, type, priority, payload, status, scheduled_at) VALUES (?, 'trend_scout', 100, '{}', 'queued', datetime('now'))`
+            ).bind(crypto.randomUUID()));
+         }
+         else if (tool.name === "run_heartbeat") {
+            // we will let the background cron handle it or return a suggestion, but let's just trigger a job if possible
+         }
+      }
+      
+      if (statements.length > 0) {
+         await env.DB.batch(statements);
+         replyText += `\n\n[System: Executed ${statements.length} internal tasks]`;
+      }
+
+      decision = { reply: replyText.slice(0, 1800), action: null };
       await env.DB.prepare(
         "UPDATE agent_runs SET output_summary = ?, completed_at = ?, success = 1 WHERE id = ?",
       ).bind(decision.reply.slice(0, 1200), new Date().toISOString(), runId).run();
