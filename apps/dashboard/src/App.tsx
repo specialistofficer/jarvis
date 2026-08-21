@@ -1,31 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
 import type { OpportunityAction, OpportunityRecord, TodaySummary } from "@jarvis/types";
 import { api, ApiError } from "./api";
 import type { AssistantMessage, AssistantProposal, DeliverableRecord, GrowthAsset, GrowthOverview, MediaAsset, MediaOverview, ReportRecord, SystemOverview } from "./api";
 
-type View = "Growth" | "Media" | "Deliverables" | "Assistant" | "Opportunities" | "Activity" | "Settings";
-
-interface SpeechRecognitionEventLike { results: { [index: number]: { [index: number]: { transcript: string } } }; }
-interface SpeechRecognitionLike {
-  lang: string; continuous: boolean; interimResults: boolean;
-  start(): void; stop(): void;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: (() => void) | null; onend: (() => void) | null;
-}
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
-declare global { interface Window { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor; } }
+type View = "Research" | "Media" | "Leads" | "Published" | "Analytics" | "Jarvis" | "Diagnostic" | "Settings";
 
 const nav: Array<{ view: View; icon: string; label: string }> = [
-  { view: "Growth", icon: "↗", label: "Growth" },
+  { view: "Research", icon: "▤", label: "Research" },
   { view: "Media", icon: "▣", label: "Media" },
-  { view: "Deliverables", icon: "▤", label: "Results" },
-  { view: "Assistant", icon: "J", label: "Jarvis" },
-  { view: "Activity", icon: "◷", label: "Activity" },
-  { view: "Settings", icon: "⚙", label: "Settings" },
+  { view: "Leads", icon: "🎯", label: "Leads" },
+  { view: "Published", icon: "✓", label: "Published" },
+  { view: "Analytics", icon: "📈", label: "Analytics" },
+  { view: "Jarvis", icon: "J", label: "Jarvis" },
 ];
-
-function Mark({ active = false }: { active?: boolean }) { return <div className={`mark ${active ? "active" : ""}`} aria-hidden="true">J</div>; }
 
 function localTime(value: unknown): string {
   if (typeof value !== "string" || !value) return "Not scheduled";
@@ -35,220 +22,203 @@ function localTime(value: unknown): string {
   return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
-function speak(text: string): void {
-  if (!("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text.replace(/[₹%]/g, " "));
-  utterance.lang = "en-IN"; utterance.rate = 1;
-  window.speechSynthesis.speak(utterance);
-}
-
-function ScoreRing({ value }: { value: number }) {
-  const color = value >= 70 ? "#c9f658" : value >= 50 ? "#ffca6a" : "#83918e";
-  return <div className="score-ring" style={{ background: `conic-gradient(${color} ${value * 3.6}deg, #24312e 0deg)` }}><span>{Math.round(value)}</span></div>;
-}
-
-function GrowthView({ growth, busy, onGenerate, onAssetAction, onProduce }: {
-  growth: GrowthOverview | null; busy: boolean; onGenerate: () => Promise<void>;
-  onAssetAction: (asset: GrowthAsset, action: "approve" | "reject" | "mark_published" | "delete", externalUrl?: string) => Promise<void>;
-  onProduce: (asset: GrowthAsset) => Promise<void>;
-}) {
-  const [copied, setCopied] = useState<string | null>(null);
-  if (!growth) return <div className="skeleton-block" />;
-  const goal = growth.goal;
-  const totals = growth.totals;
-  const target = Number(goal?.target_value ?? 0); const current = Number(totals[goal?.primary_metric as keyof typeof totals] ?? goal?.current_value ?? 0);
-  const progress = target > 0 ? Math.min(100, current / target * 100) : 0;
-  const readyAssets = growth.assets.filter((asset) => asset.status === "ready_to_publish");
-  const drafts = growth.assets.filter((asset) => asset.status === "draft");
-  const publishedAssets = growth.assets.filter((asset) => asset.status === "published");
-  const latestReview = growth.reviews[0];
-  const copyAsset = async (asset: GrowthAsset) => {
-    await navigator.clipboard.writeText(`${asset.hook}\n\n${asset.body}\n\n${asset.cta}`); setCopied(asset.id); setTimeout(() => setCopied(null), 1800);
-  };
-  return <div className="simple-page growth-page">
-    <div className="page-intro"><span className="eyebrow">ClothMatics growth operator</span><h1>Your growth work, clearly.</h1><p>Jarvis ne kya banaya, kya approve hua, aur ab kis cheez ka wait hai—sab ek jagah.</p></div>
-    <section className="growth-status-hero panel">
-      <div className="status-number">{readyAssets.length}</div>
-      <div><span className="eyebrow">Approval successful</span><h2>{readyAssets.length} content plans approved</h2><p>Aapke existing drafts delete nahi hue. Yeh copy/scripts hain aur ab <strong>media production</strong> ka wait kar rahe hain.</p></div>
-      <span className="queue-badge">✓ Approval saved</span>
-    </section>
-    <section className="connection-alert panel"><div className="connection-icon">!</div><div><span className="eyebrow">Why nothing was posted</span><h2>Publishing channels are not connected</h2><p>Instagram, LinkedIn, X aur YouTube ka official account connection abhi nahi hai. Isliye Jarvis content bana aur approve kar sakta hai, lekin aapke naam se external post karna ya analytics read karna abhi possible nahi hai.</p></div></section>
-    {goal && <section className="growth-scoreboard">
-      <div className="metric-card primary-metric"><small>{goal.primary_metric} goal</small><strong>{current} / {target}</strong><div className="progress-track"><span style={{ width: `${progress}%` }} /></div><p>Deadline {localTime(goal.deadline)}</p></div>
-      <div className="metric-card"><small>Ready for production</small><strong>{readyAssets.length}</strong><p>{drafts.length} awaiting approval</p></div>
-      <div className="metric-card"><small>Published</small><strong>{publishedAssets.length}</strong><p>Waiting for account connection</p></div>
-      <div className="metric-card"><small>Measured results</small><strong>{Number(totals.clicks ?? 0)} clicks</strong><p>{Number(totals.installs ?? 0)} installs · ₹{Number(totals.revenue_inr ?? 0)}</p></div>
-    </section>}
-    <section className="panel publish-queue"><div className="section-title"><div><span className="eyebrow">Media production queue</span><h2>{readyAssets.length ? `${readyAssets.length} approved content plans` : "No approved plans yet"}</h2><p>Yahi aapke existing drafts hain. Media tab ke andar generated PNG/MP4 output dikhega.</p></div><span className="done-count">{readyAssets.length} plans</span></div><div className="asset-grid">{readyAssets.map((asset) => <article className="growth-asset ready_to_publish" key={asset.id}><div className="asset-head"><span>{asset.channel.replaceAll("_", " ")}</span><small>Copy approved ✓</small></div><h3>{asset.title}</h3><blockquote>{asset.hook}</blockquote><p>{asset.body}</p><div className="asset-cta"><small>Call to action</small><strong>{asset.cta}</strong></div><details><summary>Production notes and evidence</summary><p>{asset.production_notes}</p>{(JSON.parse(asset.source_urls_json || "[]") as string[]).map((url) => <a href={url} target="_blank" rel="noreferrer" key={url}>Evidence source ↗</a>)}</details><div className="asset-actions"><button className="primary" disabled={busy} onClick={() => void onProduce(asset)}>Generate media</button><button onClick={() => void copyAsset(asset)}>{copied === asset.id ? "Copied ✓" : "Copy content"}</button><button className="danger" disabled={busy} onClick={() => void onAssetAction(asset, "delete")}>Delete plan</button></div></article>)}{!readyAssets.length && <div className="empty-state">Approve a draft and it will appear here.</div>}</div></section>
-    {drafts.length > 0 && <section className="panel"><div className="section-title"><div><span className="eyebrow">Needs your decision</span><h2>{drafts.length} drafts awaiting approval</h2></div></div><div className="asset-grid">{drafts.map((asset) => <article className="growth-asset" key={asset.id}><div className="asset-head"><span>{asset.channel.replaceAll("_", " ")}</span><small>Draft</small></div><h3>{asset.title}</h3><blockquote>{asset.hook}</blockquote><p>{asset.body}</p><div className="asset-actions"><button className="primary" disabled={busy} onClick={() => void onAssetAction(asset, "approve")}>Approve</button><button className="danger" disabled={busy} onClick={() => void onAssetAction(asset, "reject")}>Reject</button></div></article>)}</div></section>}
-    <section className="automation-card panel"><div><span className="eyebrow">Zero manual data entry</span><h2>Metrics form removed</h2><p>Aapse impressions, clicks, installs ya revenue type nahi karwaya jayega. Official channel/analytics connections ke baad Jarvis ko ye data automatically read karna hoga.</p></div><div className="connection-list">{["Instagram", "LinkedIn", "X", "YouTube", "Product analytics"].map((name) => <span key={name}><i />{name}<small>Not connected</small></span>)}</div></section>
-    <section className="growth-command panel"><div><span className="eyebrow">Create more only when needed</span><h2>{goal?.name ?? "No active growth goal"}</h2><p>Current queue publish hone se pehle extra content banana useful nahi hoga.</p></div><button disabled={busy || !goal} onClick={() => void onGenerate()}>{busy ? "Working…" : "Generate another pack"}</button></section>
-    <section className="panel"><span className="eyebrow">Distribution pipeline</span><h2>Leads worth reviewing</h2><p>Yeh verified contacts nahi hain. Jarvis ne public signals se research/community targets nikale hain; outreach se pehle manual verification required hai.</p><div className="lead-list">{growth.leads.map((lead) => <div key={lead.id}><span>{lead.lead_type.replaceAll("_", " ")}</span><div><strong>{lead.source_url ? <a href={lead.source_url} target="_blank" rel="noreferrer">{lead.name} ↗</a> : lead.name}</strong><p>{lead.why_relevant}</p><small>Next: {lead.next_action}</small></div></div>)}{!growth.leads.length && <p>No distribution leads created yet.</p>}</div></section>
-    <section className="panel growth-review"><div className="section-title"><div><span className="eyebrow">Learning engine · automatic daily review</span><h2>Latest performance review</h2></div></div><p>{latestReview?.summary ?? "No review yet. Jarvis will review automatically after publishing and analytics connections are active."}</p>{latestReview && <div className="report-actions">{(JSON.parse(latestReview.recommendations_json || "[]") as string[]).map((item, index) => <div key={index}><span>{index + 1}</span><strong>{item}</strong></div>)}</div>}</section>
-  </div>;
-}
-
-function MediaView({ media, busy, onAction, onRefresh }: { media: MediaOverview | null; busy: boolean; onAction: (asset: MediaAsset, action: "approve" | "reject" | "delete" | "retry") => Promise<void>; onRefresh: () => Promise<void> }) {
-  if (!media) return <div className="skeleton-block" />;
-  const count = (status: string) => Number(media.counts.find((item) => item.status === status)?.count ?? 0);
-  const ready = media.assets.filter((asset) => asset.status === "ready_for_review");
-  const working = media.assets.filter((asset) => ["render_queued", "rendering"].includes(asset.status));
-  const approved = media.assets.filter((asset) => asset.status === "approved");
-  const connectionName = (value: string) => value.replaceAll("_", " ");
-  return <div className="simple-page media-page">
-    <div className="page-intro"><span className="eyebrow">Actual output · not scripts</span><h1>Media Studio</h1><p>Generated PNG creatives aur rendered MP4/Reels yahan preview, review aur approve honge.</p></div>
-    <section className="media-hero panel"><div><span className="eyebrow">Production status</span><h2>{ready.length ? `${ready.length} media assets need your review` : working.length ? `${working.length} assets are rendering` : `${approved.length} media assets approved`}</h2><p>NVIDIA image generation first attempt hai. Unavailable hone par Jarvis branded renderer real PNG banata hai; video FFmpeg se real H.264 MP4 render hota hai.</p></div><button onClick={() => void onRefresh()} disabled={busy}>↻ Refresh media</button></section>
-    <section className="media-stats"><div><small>Rendering</small><strong>{working.length}</strong></div><div><small>Review</small><strong>{ready.length}</strong></div><div><small>Approved media</small><strong>{approved.length}</strong></div><div><small>Failed</small><strong>{count("failed")}</strong></div></section>
-    <section className="panel"><div className="section-title"><div><span className="eyebrow">Generated files</span><h2>Creative output</h2></div><span className="done-count">{media.assets.length} files</span></div><div className="media-grid">{media.assets.map((asset) => <article className="media-card" key={asset.id}>
-      <div className="media-preview">{asset.publicUrl ? asset.media_kind === "video" ? <video controls preload="metadata" src={asset.publicUrl} /> : <img src={asset.publicUrl} alt={asset.growth_title} loading="lazy" /> : <div className="render-placeholder"><span className={`status-dot ${asset.status === "failed" ? "failed" : "running"}`} /><strong>{asset.status.replaceAll("_", " ")}</strong><small>{asset.media_kind === "video" ? "MP4 render" : "PNG render"} · attempt {asset.render_attempts}</small></div>}</div>
-      <div className="media-info"><div className="asset-head"><span>{asset.channel.replaceAll("_", " ")} · {asset.media_kind}</span><small>{asset.status.replaceAll("_", " ")}</small></div><h3>{asset.growth_title}</h3><p>{asset.provider}{asset.model ? ` · ${asset.model}` : ""} · {asset.width}×{asset.height}{asset.bytes ? ` · ${(asset.bytes / 1024 / 1024).toFixed(1)} MB` : ""}</p>{asset.last_error && <details><summary>Provider/render note</summary><p>{asset.last_error}</p></details>}<div className="asset-actions">{asset.publicUrl && <a className="button-link" href={asset.publicUrl} target="_blank" rel="noreferrer">Open file ↗</a>}{asset.status === "ready_for_review" && <><button className="primary" disabled={busy} onClick={() => void onAction(asset, "approve")}>Approve media</button><button disabled={busy} onClick={() => void onAction(asset, "reject")}>Reject</button></>}{asset.status === "failed" && <button disabled={busy} onClick={() => void onAction(asset, "retry")}>Retry render</button>}{asset.status !== "published" && <button className="danger" disabled={busy} onClick={() => void onAction(asset, "delete")}>Delete media</button>}</div></div>
-    </article>)}{!media.assets.length && <div className="empty-state">No media jobs yet. Growth tab se an approved plan produce karein.</div>}</div></section>
-    <section className="automation-card panel"><div><span className="eyebrow">Storage and renderer</span><h2>Isolated Jarvis media system</h2><p><strong>{media.storage.bucket}</strong> naya bucket use ho raha hai; existing ClothMatics images bucket use nahi hua. Hard application guard {media.storage.freeGuardGb} GB hai. Renderer: {media.renderer.name}, {media.renderer.cadence.toLowerCase()}.</p></div><div className="connection-list"><span><i className="connected" />Jarvis media storage<small>Connected</small></span><span><i />Google Drive warehouse<small>OAuth required</small></span></div></section>
-    <section className="panel"><span className="eyebrow">Publishing and automatic analytics</span><h2>Account connections</h2><p>Generation/rendering ab separate kaam karta hai. External posting aur performance sync tab activate honge jab official account OAuth complete hoga.</p><div className="connection-list connection-grid">{media.connections.map((connection) => <span key={connection.id}><i className={connection.status === "connected" ? "connected" : ""} />{connectionName(connection.provider)}<small>{connection.status.replaceAll("_", " ")}</small></span>)}</div></section>
-  </div>;
-}
-
-function AssistantView({ today, overview, messages, proposal, sending, onSend, onDecision }: {
-  today: TodaySummary | null; overview: SystemOverview | null; messages: AssistantMessage[]; proposal: AssistantProposal | null; sending: boolean;
-  onSend: (message: string) => Promise<string | null>; onDecision: (decision: "confirm" | "cancel") => Promise<string | null>;
-}) {
-  const [input, setInput] = useState("");
-  const [listening, setListening] = useState(false);
-  const [voiceReplies, setVoiceReplies] = useState(() => localStorage.getItem("jarvis_voice_replies") === "true");
-  const [voiceError, setVoiceError] = useState<string | null>(null);
-  const recognition = useRef<SpeechRecognitionLike | null>(null);
-  const chatEnd = useRef<HTMLDivElement | null>(null);
-  const activeJobs = overview?.jobs.filter((job) => ["queued", "running", "deferred"].includes(String(job.status))) ?? [];
-
-  useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }, [messages, proposal, sending]);
-  const submit = async (text: string, shouldSpeak = voiceReplies) => {
-    const clean = text.trim(); if (!clean || sending) return;
-    setInput(""); const reply = await onSend(clean); if (reply && shouldSpeak) speak(reply);
-  };
-  const startVoice = () => {
-    if (listening) { recognition.current?.stop(); return; }
-    const Constructor = window.SpeechRecognition ?? window.webkitSpeechRecognition;
-    if (!Constructor) { setVoiceError("Voice input is browser mein available nahi hai. Chrome/Android try karein, ya text type karein."); return; }
-    setVoiceError(null);
-    const instance = new Constructor(); recognition.current = instance;
-    instance.lang = "en-IN"; instance.continuous = false; instance.interimResults = false;
-    instance.onresult = (event) => { const transcript = event.results[0]?.[0]?.transcript?.trim(); if (transcript) void submit(transcript, true); };
-    instance.onerror = () => { setVoiceError("Voice clear nahi mila. Mic permission check karke dobara try karein."); setListening(false); };
-    instance.onend = () => setListening(false); setListening(true); instance.start();
-  };
-  const toggleVoiceReplies = () => {
-    const next = !voiceReplies; setVoiceReplies(next); localStorage.setItem("jarvis_voice_replies", String(next));
-    if (!next) window.speechSynthesis?.cancel();
-  };
-
-  return <div className="assistant-layout">
-    <section className="jarvis-hero">
-      <div className="orb-wrap"><div className={`jarvis-orb ${listening || sending ? "thinking" : ""}`}><Mark active /></div></div>
-      <div><span className="eyebrow">Your operating assistant</span><h1>{listening ? "I’m listening…" : sending ? "Thinking…" : "Jarvis is online"}</h1><p>Ask what’s happening, what runs next, or propose a change. Nothing modifies the system without your confirmation.</p></div>
-      <div className="hero-controls"><button className={`voice-toggle ${voiceReplies ? "on" : ""}`} onClick={toggleVoiceReplies}>{voiceReplies ? "🔊 Voice on" : "🔈 Voice off"}</button></div>
-    </section>
-    <section className="live-strip">
-      <div><span className={`status-dot ${today?.systemStatus ?? "paused"}`} /><span><small>System</small><strong>{today?.systemStatus ?? "checking"}</strong></span></div>
-      <div><span><small>Active queue</small><strong>{activeJobs.length} jobs</strong></span></div>
-      <div><span><small>Next check</small><strong>{localTime(overview?.heartbeat.nextRunAt)}</strong></span></div>
-      <div><span><small>Safety</small><strong>₹0 paid spend</strong></span></div>
-    </section>
-    <section className="conversation-panel">
-      <div className="conversation-heading"><div><span className="eyebrow">Conversation</span><h2>Talk to Jarvis</h2></div><span className="private-badge">Private session</span></div>
-      <div className="messages" aria-live="polite">
-        {!messages.length && <div className="message assistant"><Mark /><div><p>Hi Chirag. Main live jobs, opportunities, reports aur system state dekh sakta hoon. “Give me a briefing” se start karein.</p><small>Jarvis · now</small></div></div>}
-        {messages.map((message) => <div className={`message ${message.role}`} key={message.id}>{message.role === "assistant" && <Mark />}<div><p>{message.content}</p><small>{message.role === "assistant" ? "Jarvis" : "You"} · {localTime(message.created_at)}</small></div></div>)}
-        {sending && <div className="message assistant"><Mark active /><div className="typing"><i /><i /><i /></div></div>}
-        {proposal && <div className="proposal-card"><span className="eyebrow">Confirmation required</span><h3>{proposal.summary}</h3><p>Jarvis ne abhi koi change nahi kiya. Yeh proposal 30 minutes mein expire hoga.</p><div><button className="primary" disabled={sending} onClick={async () => { const result = await onDecision("confirm"); if (result && voiceReplies) speak(result); }}>Confirm action</button><button disabled={sending} onClick={() => void onDecision("cancel")}>Keep things unchanged</button></div></div>}
-        <div ref={chatEnd} />
-      </div>
-      <div className="quick-prompts">{["What research did you produce?", "What runs next?", "Run sourced research", "Pause Jarvis automation"].map((prompt) => <button key={prompt} disabled={sending} onClick={() => void submit(prompt)}>{prompt}</button>)}</div>
-      {voiceError && <div className="voice-error">{voiceError}</div>}
-      <form className="composer" onSubmit={(event) => { event.preventDefault(); void submit(input); }}>
-        <textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="Message Jarvis…" rows={1} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(input); } }} />
-        <button type="button" className={`mic ${listening ? "listening" : ""}`} onClick={startVoice} aria-label={listening ? "Stop listening" : "Talk to Jarvis"}>{listening ? "■" : "●"}<span>{listening ? "Stop" : "Talk"}</span></button>
-        <button className="send" disabled={sending || !input.trim()} aria-label="Send message">↑</button>
-      </form>
-    </section>
-  </div>;
-}
-
 function parseObject(value: string): Record<string, unknown> {
   try { const parsed = JSON.parse(value) as unknown; return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {}; }
   catch { return {}; }
 }
 
-function DeliverablesView({ deliverables, reports, busy, onResearch }: { deliverables: DeliverableRecord[]; reports: ReportRecord[]; busy: boolean; onResearch: (topic: string) => Promise<void> }) {
-  const [topic, setTopic] = useState("AI wardrobe and digital closet apps: real user problems, competitors, monetization and zero-cost validation");
-  const latest = deliverables[0];
-  const content = latest ? parseObject(latest.content_json) : {};
-  const brief = (content.brief && typeof content.brief === "object" ? content.brief : content) as Record<string, unknown>;
-  const findings = Array.isArray(brief.findings) ? brief.findings as Array<Record<string, unknown>> : [];
-  const alternatives = Array.isArray(brief.alternatives) ? brief.alternatives as Array<Record<string, unknown>> : [];
-  const sources = Array.isArray(content.sources) ? content.sources as Array<Record<string, unknown>> : [];
-  const experiment = brief.validationExperiment && typeof brief.validationExperiment === "object" ? brief.validationExperiment as Record<string, unknown> : null;
-  const decision = brief.founderDecision && typeof brief.founderDecision === "object" ? brief.founderDecision as Record<string, unknown> : null;
-  const latestReport = reports[0];
-  const reportContent = latestReport ? parseObject(latestReport.content_json) : {};
-
-  return <div className="simple-page deliverables-page">
-    <div className="page-intro"><span className="eyebrow">Useful output first</span><h1>Research & reports</h1><p>Yahan sirf Jarvis ke actual deliverables hain—citations, conclusion aur next decision ke saath.</p></div>
-    <form className="panel research-request" onSubmit={(event) => { event.preventDefault(); void onResearch(topic); }}><div><span className="eyebrow">Give Jarvis an outcome</span><h2>What should I research?</h2><p>Topic likhiye. Jarvis public sources collect karke cited brief banayega; unsupported claims ko result nahi bolega.</p></div><textarea value={topic} onChange={(event) => setTopic(event.target.value)} minLength={10} maxLength={300} rows={3} /><button className="primary" disabled={busy || topic.trim().length < 10}>{busy ? "Working…" : "Queue sourced research"}</button></form>
-    {!latest && <div className="empty-state"><strong>No useful deliverable yet.</strong><br />First sourced research queue karein. Activity alone ko result nahi maana jayega.</div>}
-    {latest && <article className="research-brief panel">
-      <div className="brief-heading"><div><span className="eyebrow">Latest {String(content.mode ?? latest.deliverable_type).replaceAll("_", " ")}</span><h2>{latest.title}</h2><p>{latest.summary}</p></div><div className="brief-score"><strong>{Number(brief.confidence ?? 0)}%</strong><small>confidence</small></div></div>
-      <div className="brief-meta"><span>{latest.source_count} public sources</span><span className={latest.status === "completed" ? "good" : "warn"}>{latest.status.replaceAll("_", " ")}</span><span>{localTime(latest.created_at)}</span>{brief.verdict ? <span>Verdict: {String(brief.verdict).replaceAll("_", " ")}</span> : null}</div>
-      {findings.length > 0 && <section className="brief-section"><span className="eyebrow">Evidence-backed findings</span>{findings.map((finding, index) => <div className="finding" key={index}><h3>{index + 1}. {String(finding.finding)}</h3><p>{String(finding.implication ?? "")}</p><div className="citation-list">{(Array.isArray(finding.evidenceUrls) ? finding.evidenceUrls : []).map((url, urlIndex) => <a key={String(url)} href={String(url)} target="_blank" rel="noreferrer">Source {urlIndex + 1} ↗</a>)}</div></div>)}</section>}
-      {alternatives.length > 0 && <section className="brief-section"><span className="eyebrow">Existing alternatives & gaps</span><div className="alternative-grid">{alternatives.map((item, index) => <a className="alternative" href={String(item.url)} target="_blank" rel="noreferrer" key={index}><strong>{String(item.name)} ↗</strong><p>{String(item.positioning)}</p><small>Gap: {String(item.gap)}</small></a>)}</div></section>}
-      {experiment && <section className="brief-section experiment"><span className="eyebrow">INR 0 validation experiment</span><h3>{String(experiment.hypothesis)}</h3><p>{String(experiment.method)}</p><div className="metric-pair"><div><small>Success</small><strong>{String(experiment.successMetric)}</strong></div><div><small>Kill condition</small><strong>{String(experiment.killCondition)}</strong></div></div><ol>{(Array.isArray(experiment.steps) ? experiment.steps : []).map((step, index) => <li key={index}>{String(step)}</li>)}</ol></section>}
-      {decision && <section className="founder-decision"><span className="eyebrow">Your decision</span><h3>{String(decision.question)}</h3><div>{(Array.isArray(decision.options) ? decision.options : []).map((option, index) => <span key={index}>{String(option)}</span>)}</div></section>}
-      <details className="source-appendix"><summary>All {sources.length} inspected sources</summary><div>{sources.map((source, index) => <a href={String(source.url)} target="_blank" rel="noreferrer" key={index}><span>{index + 1}</span><div><strong>{String(source.title)}</strong><small>{String(source.sourceType).replaceAll("_", " ")} · {String(source.signal ?? "public source")}</small></div></a>)}</div></details>
-    </article>}
-    <section className="panel daily-brief"><span className="eyebrow">Daily executive report</span><h2>{latestReport ? `Founder brief · ${latestReport.period_start}` : "No daily report yet"}</h2><p>{latestReport?.summary ?? "A daily report will summarize deliverables, decisions and experiments—not job counts alone."}</p>{Array.isArray(reportContent.recommendedNextActions) && <div className="report-actions">{(reportContent.recommendedNextActions as unknown[]).map((item, index) => <div key={index}><span>{index + 1}</span><strong>{String(item)}</strong></div>)}</div>}</section>
-  </div>;
+function ResearchView({ deliverables, reports, busy, onResearch }: { deliverables: DeliverableRecord[]; reports: ReportRecord[]; busy: boolean; onResearch: (topic: string) => Promise<void> }) {
+  const [topic, setTopic] = useState("AI wardrobe and digital closet apps");
+  return (
+    <div>
+      <div className="panel">
+        <div className="panel-title">Request Research</div>
+        <div className="flex-between gap-4">
+          <input type="text" className="chat-input" style={{flex: 1, padding: '10px'}} value={topic} onChange={e => setTopic(e.target.value)} />
+          <button className="primary" disabled={busy} onClick={() => void onResearch(topic)}>Research</button>
+        </div>
+      </div>
+      <div className="grid-2">
+        {deliverables.map(d => {
+          const content = parseObject(d.content_json);
+          return (
+            <div key={d.id} className="list-item">
+              <div className="flex-between">
+                <h4>{d.title}</h4>
+                <span className="badge">{d.status}</span>
+              </div>
+              <p>{d.summary}</p>
+              <div className="meta"><span>{d.source_count} sources</span><span>{localTime(d.created_at)}</span></div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
-function OpportunitiesView({ items, onAction }: { items: OpportunityRecord[]; onAction: (id: string, action: OpportunityAction["action"], title: string) => void }) {
-  const active = items.filter((item) => !["rejected", "archived"].includes(item.status));
-  return <div className="simple-page"><div className="page-intro"><span className="eyebrow">Evidence before enthusiasm</span><h1>Opportunities</h1><p>Jarvis ke shortlisted ideas. Har direct decision aapse confirmation leta hai.</p></div><div className="opportunity-list">{active.map((item) => <article className="opportunity-card" key={item.id}><div className="opportunity-top"><div><span className="eyebrow">{item.opportunityType.replaceAll("_", " ")}</span><h2>{item.title}</h2></div><ScoreRing value={item.overallScore} /></div><p>{item.summary}</p><div className="evidence-line"><span>{item.evidence.length} evidence</span><span>{item.confidenceScore}% confidence</span><span>{item.status}</span></div><details><summary>Problem and target user</summary><p><b>Problem:</b> {item.problem}</p><p><b>Target:</b> {item.targetUser}</p></details><div className="actions"><button className="primary" onClick={() => onAction(item.id, "deep_research", item.title)}>Deep research</button><button onClick={() => onAction(item.id, "promote", item.title)}>Promote</button><button className="danger" onClick={() => onAction(item.id, "reject", item.title)}>Reject</button></div></article>)}{!active.length && <div className="empty-state">No active opportunities yet. Ask Jarvis to run Opportunity Scout.</div>}</div></div>;
+function MediaView({ growth, media, busy, onGenerate, onAssetAction, onProduce, onMediaAction }: any) {
+  const readyAssets = growth?.assets.filter((a: any) => a.status === "ready_to_publish") || [];
+  const drafts = growth?.assets.filter((a: any) => a.status === "draft") || [];
+  return (
+    <div>
+      <div className="flex-between" style={{marginBottom: 20}}>
+        <h2>Content Pipeline</h2>
+        <button className="primary" disabled={busy} onClick={onGenerate}>Generate Pack</button>
+      </div>
+      <div className="panel">
+        <div className="panel-title">Drafts Awaiting Approval</div>
+        {drafts.map((asset: any) => (
+          <div key={asset.id} className="list-item">
+            <h4>{asset.title}</h4>
+            <p>{asset.hook}</p>
+            <div className="flex-between mt-2">
+              <small>{asset.channel}</small>
+              <div className="gap-2" style={{display: 'flex'}}>
+                <button className="primary" disabled={busy} onClick={() => onAssetAction(asset, "approve")}>Approve</button>
+                <button className="danger" disabled={busy} onClick={() => onAssetAction(asset, "reject")}>Reject</button>
+              </div>
+            </div>
+          </div>
+        ))}
+        {!drafts.length && <div className="empty-state">No drafts.</div>}
+      </div>
+      <div className="panel">
+        <div className="panel-title">Approved (Waiting for Media)</div>
+        {readyAssets.map((asset: any) => (
+          <div key={asset.id} className="list-item">
+            <h4>{asset.title}</h4>
+            <div className="flex-between mt-2">
+              <small>{asset.channel}</small>
+              <button className="primary" disabled={busy} onClick={() => onProduce(asset)}>Produce Media</button>
+            </div>
+          </div>
+        ))}
+        {!readyAssets.length && <div className="empty-state">No approved plans waiting.</div>}
+      </div>
+      <div className="panel">
+        <div className="panel-title">Generated Media</div>
+        <div className="grid-3">
+          {media?.assets.filter((a:any) => a.status !== 'published').map((asset: any) => (
+            <div key={asset.id} className="media-card">
+              <div className="media-preview">
+                {asset.publicUrl ? (asset.media_kind === "video" ? <video src={asset.publicUrl} controls /> : <img src={asset.publicUrl} />) : <div style={{padding: 20, textAlign: 'center'}}>{asset.status}</div>}
+              </div>
+              <div className="media-info">
+                <h3>{asset.growth_title}</h3>
+                <p>{asset.media_kind} • {asset.status}</p>
+                <div className="media-actions">
+                  {asset.status === 'ready_for_review' && <><button className="primary" onClick={() => onMediaAction(asset, "approve")}>Approve</button><button onClick={() => onMediaAction(asset, "reject")}>Reject</button></>}
+                  {asset.status === 'failed' && <button onClick={() => onMediaAction(asset, "retry")}>Retry</button>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function ActivityView({ overview }: { overview: SystemOverview | null }) {
-  if (!overview) return <div className="skeleton-block" />;
-  const liveJobs = overview.jobs.filter((job) => ["queued", "running", "deferred", "failed"].includes(String(job.status))).slice(0, 12);
-  const completedJobs = overview.jobs.filter((job) => job.status === "completed").sort((a, b) => String(b.completed_at).localeCompare(String(a.completed_at))).slice(0, 12);
-  const nameFor = (type: unknown) => overview.recurringWork.find((item) => item.type === type)?.name ?? String(type).replaceAll("_", " ");
-  const nextRunFor = (type: unknown) => overview.jobs.find((job) => job.type === type && ["queued", "deferred"].includes(String(job.status)))?.scheduled_at;
-  const outcomeFor = (job: Record<string, unknown>, agentRun?: Record<string, unknown>) => {
-    const raw = String(job.result_summary ?? agentRun?.output_summary ?? "Job completed, but this older run did not store a detailed result.");
-    const scout = raw.match(/^(\d+) inserted; (\d+) duplicates?$/i);
-    if (scout) return `Scout searched for opportunities, saved ${scout[1]} new result and skipped ${scout[2]} duplicate${scout[2] === "1" ? "" : "s"}.`;
-    if (String(job.type) === "research_opportunity" && raw.includes(":")) {
-      const [decision = "continue research", ...reason] = raw.split(":");
-      return `Strategist recommendation: ${decision.replaceAll("_", " ")}. ${reason.join(":").trim()}`;
-    }
-    return raw;
-  };
-  return <div className="simple-page">
-    <div className="page-intro"><span className="eyebrow">Live operations</span><h1>What Jarvis actually did</h1><p>Har completed job ka result, completion time aur next run yahan milega.</p></div>
-    <section className="panel schedule-summary"><div><span className="status-dot running" /><span><small>Next hourly queue check</small><strong>{localTime(overview.heartbeat.nextRunAt)}</strong></span></div><code>{overview.heartbeat.cron} UTC</code></section>
-    <section className="panel outcomes-panel"><div className="section-title"><div><span className="eyebrow">Completed work</span><h2>Results, not just activity</h2></div><span className="done-count">{completedJobs.length} shown</span></div><div className="outcome-list">{completedJobs.map((job) => {
-      const agentRun = overview.recentAgentRuns.find((run) => run.job_id === job.id && Number(run.success) === 1);
-      const nextRun = nextRunFor(job.type);
-      return <article className="outcome-card" key={String(job.id)}><div className="outcome-head"><span className="done-icon">✓</span><div><small>Completed</small><h3>{nameFor(job.type)}</h3></div></div><p>{outcomeFor(job, agentRun)}</p><div className="outcome-times"><span><small>Finished</small><strong>{localTime(job.completed_at)}</strong></span><span><small>Next scheduled run</small><strong>{nextRun ? localTime(nextRun) : "On founder request"}</strong></span></div>{agentRun?.output_summary && job.result_summary !== agentRun.output_summary ? <details><summary>Technical AI output</summary><p>{String(agentRun.output_summary)}</p></details> : null}</article>;
-    })}{!completedJobs.length && <div className="empty-state">No completed job outcome yet.</div>}</div></section>
-    <section className="panel"><span className="eyebrow">Upcoming queue and exceptions</span><div className="activity-rows">{liveJobs.map((job) => <div key={String(job.id)}><span className={`status-dot ${String(job.status)}`} /><span><strong>{nameFor(job.type)}</strong><small>{String(job.status)} · {localTime(job.scheduled_at)}</small>{job.last_error ? <p>{String(job.last_error)}</p> : null}</span></div>)}{!liveJobs.length && <p>Queue clear hai; next recurring jobs apne scheduled time par create/run honge.</p>}</div></section>
-    <details className="panel technical-log"><summary>Technical AI audit log</summary><div className="activity-rows">{overview.recentAgentRuns.slice(0, 10).map((run) => <div key={String(run.id)}><span className={`status-dot ${Number(run.success) === 1 ? "running" : "failed"}`} /><span><strong>{String(run.role).replaceAll("_", " ")}</strong><small>{String(run.model)} · {localTime(run.completed_at ?? run.started_at)}</small><p>{String(run.output_summary ?? run.error ?? "In progress")}</p></span></div>)}</div></details>
-  </div>;
+function LeadsView({ growth }: any) {
+  return (
+    <div className="panel">
+      <div className="panel-title">Distribution Leads</div>
+      {growth?.leads.map((lead: any) => (
+        <div key={lead.id} className="list-item">
+          <h4>{lead.name}</h4>
+          <p>{lead.why_relevant}</p>
+          <div className="meta"><span>{lead.lead_type}</span><span>Next: {lead.next_action}</span></div>
+        </div>
+      ))}
+      {!growth?.leads?.length && <div className="empty-state">No leads found yet.</div>}
+    </div>
+  );
 }
 
-function SettingsView({ today, overview, onStatus, onRun, onLogout }: { today: TodaySummary | null; overview: SystemOverview | null; onStatus: (status: "running" | "paused") => void; onRun: () => void; onLogout: () => void }) {
-  return <div className="simple-page"><div className="page-intro"><span className="eyebrow">Control and safety</span><h1>Settings</h1><p>Rare controls yahan hain. Daily work ke liye Jarvis chat use karein.</p></div><section className="panel settings-card"><div><span className="eyebrow">Autonomy</span><h2>System is {today?.systemStatus ?? "checking"}</h2><p>Hourly heartbeat ek due job process karta hai. Jarvis se change bolne par bhi confirmation required rahegi.</p></div><div className="actions"><button className={today?.systemStatus === "paused" ? "primary" : "danger"} onClick={() => onStatus(today?.systemStatus === "paused" ? "running" : "paused")}>{today?.systemStatus === "paused" ? "Resume system" : "Pause system"}</button><button onClick={onRun}>Run one due job</button></div></section><section className="panel provider-explainer"><div><span className="eyebrow">AI provider — simple meaning</span><h2>{overview?.provider.model ?? "Checking model"}</h2><p><b>Llama 3.1 8B</b> Jarvis ka language/analysis model hai; <b>NVIDIA</b> us model ko run karne wali service hai.</p></div><div className="meaning-grid"><div><span>✓</span><div><strong>Free allowance confirmed</strong><p>Aapne existing free allowance confirm kiya hai. Yeh live NVIDIA balance meter nahi hai.</p></div></div><div><span>₹0</span><div><strong>Jarvis spend policy</strong><p>App paid work intentionally approve nahi karta. Provider billing ko separately NVIDIA account par control karna safest hai.</p></div></div></div><div className="cost-note"><strong>Important:</strong> “Paid spend blocked” Jarvis ki internal policy hai, NVIDIA account-level spending limit nahi.</div></section><section className="panel"><span className="eyebrow">Connected resources</span><div className="resource-list">{today?.resources.map((resource) => <div key={resource.provider}><span className={`resource-dot ${resource.enabled ? "enabled" : ""}`} /><strong>{resource.provider}</strong><small>{resource.freeOnly ? "free only" : "manual"}</small></div>)}</div></section><section className="panel account-card"><div><span className="eyebrow">Account</span><h2>Single founder access</h2><p>Session is stored only in this browser and expires automatically.</p></div><button className="danger logout" onClick={onLogout}>Log out of Jarvis</button></section></div>;
+function PublishedView({ growth, media }: any) {
+  const pubMedia = media?.assets.filter((a:any) => a.status === 'published') || [];
+  return (
+    <div className="panel">
+      <div className="panel-title">Published Results</div>
+      <div className="grid-3">
+        {pubMedia.map((asset: any) => (
+          <div key={asset.id} className="media-card">
+            <div className="media-preview">
+              {asset.publicUrl ? (asset.media_kind === "video" ? <video src={asset.publicUrl} controls /> : <img src={asset.publicUrl} />) : null}
+            </div>
+            <div className="media-info">
+              <h3>{asset.growth_title}</h3>
+              <p>Published to {asset.channel}</p>
+            </div>
+          </div>
+        ))}
+        {!pubMedia.length && <div className="empty-state">No published media yet.</div>}
+      </div>
+    </div>
+  );
+}
+
+function AnalyticsView({ growth }: any) {
+  const t = growth?.totals || {};
+  return (
+    <div>
+      <div className="grid-4" style={{marginBottom: 24}}>
+        <div className="metric"><small>Revenue</small><strong>₹{t.revenue_inr || 0}</strong></div>
+        <div className="metric"><small>Installs</small><strong>{t.installs || 0}</strong></div>
+        <div className="metric"><small>Clicks</small><strong>{t.clicks || 0}</strong></div>
+        <div className="metric"><small>Views</small><strong>{t.views || 0}</strong></div>
+      </div>
+      <div className="panel">
+        <div className="panel-title">Latest Review</div>
+        <p>{growth?.reviews?.[0]?.summary || "No reviews yet."}</p>
+      </div>
+    </div>
+  );
+}
+
+function JarvisView({ messages, onSend, busy }: any) {
+  const [input, setInput] = useState("");
+  return (
+    <div className="chat-container">
+      <div className="chat-messages">
+        {messages.map((m: any) => (
+          <div key={m.id} className={`message ${m.role}`}>
+            <div className="avatar">{m.role === 'user' ? 'U' : 'J'}</div>
+            <div className="bubble">{m.content}</div>
+          </div>
+        ))}
+      </div>
+      <form className="chat-input" onSubmit={e => { e.preventDefault(); if (input) { onSend(input); setInput(""); } }}>
+        <input value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Jarvis..." />
+        <button className="primary" disabled={busy || !input}>Send</button>
+      </form>
+    </div>
+  );
+}
+
+function DiagnosticView({ overview, onStatus, today }: any) {
+  return (
+    <div className="panel">
+      <div className="panel-title">Technical Diagnostics</div>
+      <div className="flex-between" style={{marginBottom: 20}}>
+        <div>System is <strong>{today?.systemStatus}</strong></div>
+        <button onClick={() => onStatus(today?.systemStatus === 'paused' ? 'running' : 'paused')}>{today?.systemStatus === 'paused' ? 'Resume' : 'Pause'}</button>
+      </div>
+      <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
+        {overview?.jobs.slice(0,10).map((j:any) => (
+          <div key={j.id} className="list-item" style={{display: 'flex', justifyContent: 'space-between'}}>
+            <div><strong>{j.type}</strong> <span style={{color:'var(--text-muted)'}}>{j.status}</span></div>
+            <small>{localTime(j.updated_at)}</small>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function App() {
-  const [view, setView] = useState<View>("Growth");
+  const [view, setView] = useState<View>("Research");
   const [today, setToday] = useState<TodaySummary | null>(null);
   const [opportunities, setOpportunities] = useState<OpportunityRecord[]>([]);
   const [overview, setOverview] = useState<SystemOverview | null>(null);
@@ -260,44 +230,66 @@ export function App() {
   const [media, setMedia] = useState<MediaOverview | null>(null);
   const [authState, setAuthState] = useState<"checking" | "required" | "authenticated">("checking");
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
-  const [authError, setAuthError] = useState<string | null>(null); const [error, setError] = useState<string | null>(null); const [notice, setNotice] = useState<string | null>(null); const [busy, setBusy] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
       const [todayData, opportunityData, overviewData, assistantData, deliverableData, reportData, growthData, mediaData] = await Promise.all([api.today(), api.opportunities(), api.systemOverview(), api.assistantHistory(), api.deliverables(), api.reports(), api.growthOverview(), api.mediaOverview()]);
-      setToday(todayData); setOpportunities(opportunityData.opportunities); setOverview(overviewData); setMessages(assistantData.messages); setProposal(assistantData.proposal); setDeliverables(deliverableData.deliverables); setReports(reportData.reports); setGrowth(growthData); setMedia(mediaData); setError(null); setAuthState("authenticated");
+      setToday(todayData); setOpportunities(opportunityData.opportunities); setOverview(overviewData); setMessages(assistantData.messages); setProposal(assistantData.proposal); setDeliverables(deliverableData.deliverables); setReports(reportData.reports); setGrowth(growthData); setMedia(mediaData); setAuthState("authenticated");
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) setAuthState("required");
-      else { setError(cause instanceof Error ? cause.message : "Jarvis is temporarily unavailable"); setAuthState("authenticated"); }
+      else setAuthState("authenticated");
     }
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
 
-  const logout = () => { api.logout(); window.speechSynthesis?.cancel(); setToday(null); setOverview(null); setMessages([]); setProposal(null); setPassword(""); setAuthState("required"); };
-  const confirmBrowserAction = (description: string) => window.confirm(`${description}\n\nJarvis will only change this after your confirmation.`);
-  const onStatus = async (status: "running" | "paused") => { if (!confirmBrowserAction(`${status === "paused" ? "Pause" : "Resume"} autonomous Jarvis?`)) return; setBusy(true); try { await api.systemStatus(status); await refresh(); } finally { setBusy(false); } };
-  const onRun = async () => { if (!confirmBrowserAction("Run one due job now?")) return; setBusy(true); try { await api.runHeartbeat(); await refresh(); } finally { setBusy(false); } };
-  const onOpportunityAction = async (id: string, action: OpportunityAction["action"], title: string) => { if (!confirmBrowserAction(`${action.replaceAll("_", " ")} “${title}”?`)) return; setBusy(true); try { await api.opportunityAction(id, { action }); await refresh(); } finally { setBusy(false); } };
-  const onResearch = async (topic: string) => { setBusy(true); setError(null); try { const result = await api.requestResearch(topic.trim()); setError(result.message + " Activity page par progress check kar sakte hain."); await refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Research could not be queued"); } finally { setBusy(false); } };
-  const onGenerateGrowth = async () => { if (!growth?.goal || !confirmBrowserAction("Generate a fresh ClothMatics growth pack?")) return; setBusy(true); setError(null); try { const result = await api.startGrowth(growth.goal.id); setError(result.message + " Activity page par progress dikhega."); await refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Growth Factory could not be queued"); } finally { setBusy(false); } };
-  const onGrowthAssetAction = async (asset: GrowthAsset, action: "approve" | "reject" | "mark_published" | "delete", externalUrl?: string) => { const description = action === "delete" ? `Delete “${asset.title}” from the active queue? This can be recovered from the database audit.` : `${action.replaceAll("_", " ")} “${asset.title}”?`; if (!confirmBrowserAction(description)) return; setBusy(true); setNotice(null); try { await api.growthAssetAction(asset.id, action, externalUrl); await refresh(); setNotice(action === "approve" ? `Approved: “${asset.title}” is now ready for media production.` : action === "delete" ? `Deleted: “${asset.title}” was removed from the active queue.` : `Saved: “${asset.title}” was ${action.replaceAll("_", " ")}.`); } catch (cause) { setError(cause instanceof Error ? cause.message : "Asset action failed"); } finally { setBusy(false); } };
-  const onProduceMedia = async (asset: GrowthAsset) => { setBusy(true); setNotice(null); try { const result = await api.produceMedia(asset.id); setNotice(`${result.message} Media tab par renderer status dikhega.`); setView("Media"); await refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Media production could not be queued"); } finally { setBusy(false); } };
-  const onMediaAction = async (asset: MediaAsset, action: "approve" | "reject" | "delete" | "retry") => { if (!confirmBrowserAction(`${action} ${asset.media_kind} “${asset.growth_title}”?`)) return; setBusy(true); setNotice(null); try { await api.mediaAssetAction(asset.id, action); await refresh(); setNotice(`${asset.media_kind === "video" ? "Video" : "Image"} ${action} saved.`); } catch (cause) { setError(cause instanceof Error ? cause.message : "Media action failed"); } finally { setBusy(false); } };
-  const sendMessage = async (text: string): Promise<string | null> => {
-    setBusy(true); setError(null); setMessages((current) => [...current, { id: `local-${crypto.randomUUID()}`, role: "user", content: text, created_at: new Date().toISOString() }]);
-    try { const result = await api.assistantChat(text); setMessages((current) => [...current, { id: `local-${crypto.randomUUID()}`, role: "assistant", content: result.reply, created_at: new Date().toISOString() }]); setProposal(result.proposal); return result.reply; }
-    catch (cause) { const message = cause instanceof Error ? cause.message : "Jarvis could not answer"; setMessages((current) => [...current, { id: `local-${crypto.randomUUID()}`, role: "assistant", content: `I couldn't complete that request: ${message}`, created_at: new Date().toISOString() }]); return null; }
-    finally { setBusy(false); }
-  };
-  const decideProposal = async (decision: "confirm" | "cancel"): Promise<string | null> => {
-    if (!proposal) return null; setBusy(true);
-    try { const result = await api.assistantAction(proposal.id, decision); setProposal(null); await refresh(); return result.message; }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Action could not be completed"); return null; }
-    finally { setBusy(false); }
-  };
+  const logout = () => { api.logout(); setAuthState("required"); };
+  const onStatus = async (status: "running" | "paused") => { setBusy(true); await api.systemStatus(status); await refresh(); setBusy(false); };
+  const onGenerateGrowth = async () => { setBusy(true); await api.startGrowth(growth!.goal!.id); await refresh(); setBusy(false); };
+  const onGrowthAssetAction = async (asset: GrowthAsset, action: any) => { setBusy(true); await api.growthAssetAction(asset.id, action); await refresh(); setBusy(false); };
+  const onProduceMedia = async (asset: GrowthAsset) => { setBusy(true); await api.produceMedia(asset.id); await refresh(); setBusy(false); };
+  const onMediaAction = async (asset: MediaAsset, action: any) => { setBusy(true); await api.mediaAssetAction(asset.id, action); await refresh(); setBusy(false); };
+  const onResearch = async (topic: string) => { setBusy(true); await api.requestResearch(topic); await refresh(); setBusy(false); };
+  const sendMessage = async (text: string) => { setBusy(true); await api.assistantChat(text); await refresh(); setBusy(false); };
 
-  if (authState === "checking") return <div className="boot-screen"><div className="jarvis-orb thinking"><Mark active /></div><p>Connecting to Jarvis…</p></div>;
-  if (authState === "required") return <div className="auth-shell"><form className="auth-card" onSubmit={async (event) => { event.preventDefault(); setBusy(true); setAuthError(null); try { await api.login(email, password); setPassword(""); await refresh(); } catch (cause) { setAuthError(cause instanceof Error ? cause.message : "Login failed"); } finally { setBusy(false); } }}><Mark active /><span className="eyebrow">Private founder access</span><h1>Sign in to Jarvis</h1><p>Enter your founder credentials. Email is never pre-filled or bundled into the website.</p><label htmlFor="email">Email</label><input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" placeholder="you@example.com" required /><label htmlFor="password">Password</label><input id="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" placeholder="Your password" required />{authError && <div className="auth-error">{authError}</div>}<button className="primary" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button><small>One founder account · secure seven-day session</small></form></div>;
+  if (authState === "checking") return <div className="auth-wrap">Loading...</div>;
+  if (authState === "required") return (
+    <div className="auth-wrap">
+      <form className="auth-card" onSubmit={async e => { e.preventDefault(); setBusy(true); try { await api.login(email, password); await refresh(); } catch { setAuthError("Failed"); } finally { setBusy(false); } }}>
+        <h2>Jarvis Login</h2>
+        <div className="form-group"><label>Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} required /></div>
+        <div className="form-group"><label>Password</label><input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
+        {authError && <div style={{color: 'var(--danger)'}}>{authError}</div>}
+        <button className="primary" disabled={busy}>Sign In</button>
+      </form>
+    </div>
+  );
 
-  return <div className="app-shell"><aside><div className="brand"><Mark active /><div><strong>Jarvis</strong><small>Growth operator</small></div></div><nav>{nav.map((item) => <button key={item.view} className={view === item.view ? "active" : ""} onClick={() => setView(item.view)}><span>{item.icon}</span>{item.label}</button>)}</nav><div className="sidebar-bottom"><div><span className={`status-dot ${today?.systemStatus ?? "paused"}`} /><span><strong>{today?.systemStatus ?? "offline"}</strong><small>₹0 guard active</small></span></div><button className="logout-link" onClick={logout}>↪ Log out</button></div></aside><main>{view !== "Assistant" && <header><div><span className="eyebrow">Jarvis / {view}</span></div><div className="header-actions"><button onClick={() => void refresh()} disabled={busy}>↻ Refresh</button><button className="logout-button" onClick={logout}>Log out</button></div></header>}{error && <div className="error-banner"><strong>Jarvis notice</strong><span>{error}</span></div>}{notice && <div className="success-banner"><strong>Done</strong><span>{notice}</span></div>}{view === "Growth" && <GrowthView growth={growth} busy={busy} onGenerate={onGenerateGrowth} onAssetAction={onGrowthAssetAction} onProduce={onProduceMedia} />}{view === "Media" && <MediaView media={media} busy={busy} onAction={onMediaAction} onRefresh={refresh} />}{view === "Deliverables" && <DeliverablesView deliverables={deliverables} reports={reports} busy={busy} onResearch={onResearch} />}{view === "Assistant" && <AssistantView today={today} overview={overview} messages={messages} proposal={proposal} sending={busy} onSend={sendMessage} onDecision={decideProposal} />}{view === "Opportunities" && <OpportunitiesView items={opportunities} onAction={onOpportunityAction} />}{view === "Activity" && <ActivityView overview={overview} />}{view === "Settings" && <SettingsView today={today} overview={overview} onStatus={onStatus} onRun={onRun} onLogout={logout} />}</main><nav className="bottom-nav">{nav.map((item) => <button key={item.view} className={view === item.view ? "active" : ""} onClick={() => setView(item.view)}><span>{item.icon}</span><small>{item.label}</small></button>)}</nav></div>;
+  return (
+    <div className="app-shell">
+      <aside>
+        <div className="brand"><div className="mark">J</div><div><strong>Jarvis</strong><small>Growth Operator</small></div></div>
+        <nav>
+          {nav.map(item => <button key={item.view} className={view === item.view ? "active" : ""} onClick={() => setView(item.view)}><span>{item.icon}</span>{item.label}</button>)}
+        </nav>
+        <div className="sidebar-bottom">
+          <nav>
+            <button className={view === "Diagnostic" ? "active" : ""} onClick={() => setView("Diagnostic")}><span>⚙</span> Diagnostic</button>
+            <button onClick={logout}><span>↪</span> Logout</button>
+          </nav>
+          <div className="status"><span className={`status-dot ${today?.systemStatus}`} /> {today?.systemStatus}</div>
+        </div>
+      </aside>
+      <main>
+        <header><h1>{view}</h1></header>
+        {view === "Research" && <ResearchView deliverables={deliverables} reports={reports} busy={busy} onResearch={onResearch} />}
+        {view === "Media" && <MediaView growth={growth} media={media} busy={busy} onGenerate={onGenerateGrowth} onAssetAction={onGrowthAssetAction} onProduce={onProduceMedia} onMediaAction={onMediaAction} />}
+        {view === "Leads" && <LeadsView growth={growth} />}
+        {view === "Published" && <PublishedView growth={growth} media={media} />}
+        {view === "Analytics" && <AnalyticsView growth={growth} />}
+        {view === "Jarvis" && <JarvisView messages={messages} onSend={sendMessage} busy={busy} />}
+        {view === "Diagnostic" && <DiagnosticView overview={overview} today={today} onStatus={onStatus} />}
+      </main>
+    </div>
+  );
 }
