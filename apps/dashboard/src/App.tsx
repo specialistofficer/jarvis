@@ -11,7 +11,6 @@ const nav: Array<{ view: View; icon: string; label: string }> = [
   { view: "Leads", icon: "🎯", label: "Leads" },
   { view: "Published", icon: "✓", label: "Published" },
   { view: "Analytics", icon: "📈", label: "Analytics" },
-  { view: "Jarvis", icon: "J", label: "Jarvis" },
 ];
 
 function localTime(value: unknown): string {
@@ -27,15 +26,24 @@ function parseObject(value: string): Record<string, unknown> {
   catch { return {}; }
 }
 
-function ResearchView({ deliverables, reports, busy, onResearch }: { deliverables: DeliverableRecord[]; reports: ReportRecord[]; busy: boolean; onResearch: (topic: string) => Promise<void> }) {
-  const [topic, setTopic] = useState("AI wardrobe and digital closet apps");
+function ResearchView({ deliverables, reports, messages, busy, onResearch, onSend }: { deliverables: DeliverableRecord[]; reports: ReportRecord[]; messages: AssistantMessage[]; busy: boolean; onResearch: (topic: string) => Promise<void>; onSend: (text: string) => Promise<void> }) {
+  const [input, setInput] = useState("");
   return (
     <div>
-      <div className="panel">
-        <div className="panel-title">Request Research</div>
+      <div className="panel chat-container" style={{marginBottom: 20}}>
+        <div className="panel-title">Ask Jarvis / Request Research</div>
+        <div className="chat-messages" style={{maxHeight: '300px', overflowY: 'auto', marginBottom: '10px'}}>
+          {messages.map((m: any) => (
+            <div key={m.id} className={`message ${m.role}`}>
+              <div className="avatar">{m.role === 'user' ? 'U' : 'J'}</div>
+              <div className="bubble">{m.content}</div>
+            </div>
+          ))}
+        </div>
         <div className="flex-between gap-4">
-          <input type="text" className="chat-input" style={{flex: 1, padding: '10px'}} value={topic} onChange={e => setTopic(e.target.value)} />
-          <button className="primary" disabled={busy} onClick={() => void onResearch(topic)}>Research</button>
+          <input type="text" className="chat-input" style={{flex: 1, padding: '10px'}} value={input} onChange={e => setInput(e.target.value)} placeholder="Ask a question or enter a research topic..." />
+          <button className="secondary" disabled={busy || !input} onClick={() => { if(input) { onSend(input); setInput(""); } }}>Ask Jarvis</button>
+          <button className="primary" disabled={busy || !input} onClick={() => void onResearch(input)}>Run Deep Research</button>
         </div>
       </div>
       <div className="grid-2">
@@ -176,26 +184,6 @@ function AnalyticsView({ growth }: any) {
         <div className="panel-title">Latest Review</div>
         <p>{growth?.reviews?.[0]?.summary || "No reviews yet."}</p>
       </div>
-    </div>
-  );
-}
-
-function JarvisView({ messages, onSend, busy }: any) {
-  const [input, setInput] = useState("");
-  return (
-    <div className="chat-container">
-      <div className="chat-messages">
-        {messages.map((m: any) => (
-          <div key={m.id} className={`message ${m.role}`}>
-            <div className="avatar">{m.role === 'user' ? 'U' : 'J'}</div>
-            <div className="bubble">{m.content}</div>
-          </div>
-        ))}
-      </div>
-      <form className="chat-input" onSubmit={e => { e.preventDefault(); if (input) { onSend(input); setInput(""); } }}>
-        <input value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Jarvis..." />
-        <button className="primary" disabled={busy || !input}>Send</button>
-      </form>
     </div>
   );
 }
@@ -368,12 +356,11 @@ export function App() {
       </aside>
       <main>
         <header><h1>{view}</h1></header>
-        {view === "Research" && <ResearchView deliverables={deliverables} reports={reports} busy={busy} onResearch={onResearch} />}
+        {view === "Research" && <ResearchView deliverables={deliverables} reports={reports} messages={messages} busy={busy} onResearch={onResearch} onSend={sendMessage} />}
         {view === "Media" && <MediaView growth={growth} media={media} busy={busy} onGenerate={onGenerateGrowth} onScoutTrends={onScoutTrends} onAssetAction={onGrowthAssetAction} onProduce={onProduceMedia} onMediaAction={onMediaAction} />}
         {view === "Leads" && <LeadsView growth={growth} />}
         {view === "Published" && <PublishedView growth={growth} media={media} />}
         {view === "Analytics" && <AnalyticsView growth={growth} />}
-        {view === "Jarvis" && <JarvisView messages={messages} onSend={sendMessage} busy={busy} />}
         {view === "Diagnostic" && <DiagnosticView overview={overview} today={today} onStatus={onStatus} />}
       </main>
     </div>
