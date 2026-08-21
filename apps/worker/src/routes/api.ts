@@ -240,12 +240,17 @@ export async function handleApi(request: Request, env: Env): Promise<Response> {
       return json({ ok: true, message: "Trend scout job queued" });
     }
     if (request.method === "POST" && path === "/api/system/trigger_outreach") {
-      const body = await parseBody(request).catch(() => ({}));
+      const body: any = await parseBody(request).catch(() => ({}));
       const query = typeof body.query === "string" ? body.query : "Plumbers in Texas";
       await env.DB.prepare(
         `INSERT INTO jobs (id, type, priority, payload, status, scheduled_at) VALUES (?, 'outreach_scout', 100, ?, 'queued', datetime('now'))`
       ).bind(crypto.randomUUID(), JSON.stringify({ query })).run();
       return json({ ok: true, message: `Outreach job queued for query: ${query}` });
+    }
+    if (request.method === "GET" && path === "/api/outreach/overview") {
+      const campaigns = await env.DB.prepare("SELECT * FROM outreach_campaigns ORDER BY created_at DESC LIMIT 10").all();
+      const leads = await env.DB.prepare("SELECT * FROM outreach_leads ORDER BY created_at DESC LIMIT 50").all();
+      return json({ campaigns: campaigns.results, leads: leads.results });
     }
     if (request.method === "GET" && path === "/api/opportunities") {
       return json({ opportunities: await listOpportunities(env.DB) });

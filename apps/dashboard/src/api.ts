@@ -139,6 +139,8 @@ export const api = {
   reports: () => request<{ reports: ReportRecord[] }>("/api/reports"),
   growthOverview: () => request<GrowthOverview>("/api/growth/overview"),
   mediaOverview: () => request<MediaOverview>("/api/media/overview"),
+  fetchOutreachOverview: () => request<any>("/api/outreach/overview"),
+  triggerOutreach: (query: string) => request<{ ok: boolean }>("/api/system/trigger_outreach", { method: "POST", body: JSON.stringify({ query }) }),
   triggerScout: () => request<{ ok: boolean; message: string }>("/api/system/trigger_scout", { method: "POST" }),
   produceMedia: (growthAssetId: string) => request<{ ok: true; jobId: string; message: string }>(
     `/api/media/growth-assets/${encodeURIComponent(growthAssetId)}/produce`, { method: "POST" },

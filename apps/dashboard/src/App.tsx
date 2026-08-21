@@ -134,18 +134,48 @@ function MediaView({ growth, media, busy, onGenerate, onScoutTrends, onAssetActi
   );
 }
 
-function LeadsView({ growth }: any) {
+function LeadsView({ outreach, busy, onTriggerOutreach }: any) {
+  const [query, setQuery] = useState("");
   return (
-    <div className="panel">
-      <div className="panel-title">Distribution Leads</div>
-      {growth?.leads.map((lead: any) => (
-        <div key={lead.id} className="list-item">
-          <h4>{lead.name}</h4>
-          <p>{lead.why_relevant}</p>
-          <div className="meta"><span>{lead.lead_type}</span><span>Next: {lead.next_action}</span></div>
+    <div>
+      <div className="panel" style={{marginBottom: '20px'}}>
+        <div className="panel-title">Outreach Campaigns (Lead Scraper)</div>
+        <div className="flex-between gap-4">
+          <input type="text" style={{flex: 1, padding: '10px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', color: '#fff'}} value={query} onChange={e => setQuery(e.target.value)} placeholder="e.g. Plumbers in Texas, Dentists in NY..." />
+          <button className="primary" disabled={busy || !query} onClick={() => { if(query) { onTriggerOutreach(query); setQuery(""); } }}>Start Outreach</button>
         </div>
-      ))}
-      {!growth?.leads?.length && <div className="empty-state">No leads found yet.</div>}
+      </div>
+      <div className="grid-2">
+        <div className="panel">
+          <div className="panel-title">Recent Campaigns</div>
+          {outreach?.campaigns?.map((c: any) => (
+            <div key={c.id} className="list-item">
+              <h4>{c.query}</h4>
+              <div className="meta"><span>{c.status}</span><span>{localTime(c.created_at)}</span></div>
+            </div>
+          ))}
+          {!outreach?.campaigns?.length && <div className="empty-state">No campaigns found.</div>}
+        </div>
+        <div className="panel">
+          <div className="panel-title">Drafted Pitches (AI Generated)</div>
+          <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+            {outreach?.leads?.map((lead: any) => (
+              <div key={lead.id} className="list-item" style={{background: 'var(--bg)'}}>
+                <div className="flex-between">
+                  <h4>{lead.business_name}</h4>
+                  <a href={lead.website_url} target="_blank" rel="noreferrer" style={{fontSize: '12px'}}>Visit Website</a>
+                </div>
+                {lead.contact_email && <div style={{fontSize: '12px', color: 'var(--accent)', marginTop: '4px'}}>Email: {lead.contact_email}</div>}
+                <div style={{fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px'}}><strong>SEO Issues:</strong> {lead.seo_issues}</div>
+                <div style={{marginTop: '12px', padding: '12px', background: 'var(--panel)', borderRadius: '8px', fontSize: '13px', whiteSpace: 'pre-wrap', border: '1px solid var(--border)'}}>
+                  {lead.personalized_pitch}
+                </div>
+              </div>
+            ))}
+            {!outreach?.leads?.length && <div className="empty-state">No leads generated yet.</div>}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -278,19 +308,20 @@ export function App() {
   const [opportunities, setOpportunities] = useState<OpportunityRecord[]>([]);
   const [overview, setOverview] = useState<SystemOverview | null>(null);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
-  const [proposal, setProposal] = useState<AssistantProposal | null>(null);
+const [proposal, setProposal] = useState<AssistantProposal | null>(null);
   const [deliverables, setDeliverables] = useState<DeliverableRecord[]>([]);
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [growth, setGrowth] = useState<GrowthOverview | null>(null);
   const [media, setMedia] = useState<MediaOverview | null>(null);
+  const [outreach, setOutreach] = useState<any>(null);
   const [authState, setAuthState] = useState<"checking" | "required" | "authenticated">("checking");
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const [todayData, opportunityData, overviewData, assistantData, deliverableData, reportData, growthData, mediaData] = await Promise.all([api.today(), api.opportunities(), api.systemOverview(), api.assistantHistory(), api.deliverables(), api.reports(), api.growthOverview(), api.mediaOverview()]);
-      setToday(todayData); setOpportunities(opportunityData.opportunities); setOverview(overviewData); setMessages(assistantData.messages); setProposal(assistantData.proposal); setDeliverables(deliverableData.deliverables); setReports(reportData.reports); setGrowth(growthData); setMedia(mediaData); setAuthState("authenticated");
+      const [todayData, opportunityData, overviewData, assistantData, deliverableData, reportData, growthData, mediaData, outreachData] = await Promise.all([api.today(), api.opportunities(), api.systemOverview(), api.assistantHistory(), api.deliverables(), api.reports(), api.growthOverview(), api.mediaOverview(), api.fetchOutreachOverview()]);
+      setToday(todayData); setOpportunities(opportunityData.opportunities); setOverview(overviewData); setMessages(assistantData.messages); setProposal(assistantData.proposal); setDeliverables(deliverableData.deliverables); setReports(reportData.reports); setGrowth(growthData); setMedia(mediaData); setOutreach(outreachData); setAuthState("authenticated");
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) setAuthState("required");
       else setAuthState("authenticated");
@@ -325,7 +356,24 @@ export function App() {
   const onScoutTrends = async () => { setBusy(true); await api.triggerScout(); alert("Scouting started! Check diagnostics."); await refresh(); setBusy(false); };
   const onGrowthAssetAction = async (asset: GrowthAsset, action: any) => { setBusy(true); await api.growthAssetAction(asset.id, action); await refresh(); setBusy(false); };
   const onProduceMedia = async (asset: GrowthAsset) => { setBusy(true); await api.produceMedia(asset.id); await refresh(); setBusy(false); };
-  const onMediaAction = async (asset: MediaAsset, action: any) => { setBusy(true); await api.mediaAssetAction(asset.id, action); await refresh(); setBusy(false); };
+  const onMediaAction = async (asset: MediaAsset, action: "approve" | "reject" | "delete" | "retry") => {
+    setBusy(true);
+    try {
+      await api.mediaAssetAction(asset.id, action);
+      await refresh();
+    } catch (e: any) { alert(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const onTriggerOutreach = async (query: string) => {
+    setBusy(true);
+    try {
+      await api.triggerOutreach(query);
+      await refresh();
+    } catch (e: any) { alert(e.message); }
+    finally { setBusy(false); }
+  };
+
   const onResearch = async (topic: string) => { setBusy(true); await api.requestResearch(topic); await refresh(); setBusy(false); };
   const sendMessage = async (text: string) => { setBusy(true); await api.assistantChat(text); await refresh(); setBusy(false); };
 
@@ -345,7 +393,7 @@ export function App() {
   return (
     <div className="app-shell">
       <aside>
-        <div className="brand"><div className="mark">J</div><div><strong>Jarvis</strong><small>Growth Operator</small></div></div>
+        <div className="brand"><div className="mark">J</div><div><strong>Jarvis</strong><small>Founder HQ</small></div></div>
         <nav>
           {nav.map(item => <button key={item.view} className={view === item.view ? "active" : ""} onClick={() => setView(item.view)}><span>{item.icon}</span>{item.label}</button>)}
         </nav>
@@ -361,7 +409,7 @@ export function App() {
         <header><h1>{view}</h1></header>
         {view === "Research" && <ResearchView deliverables={deliverables} reports={reports} messages={messages} busy={busy} onResearch={onResearch} onSend={sendMessage} />}
         {view === "Media" && <MediaView growth={growth} media={media} busy={busy} onGenerate={onGenerateGrowth} onScoutTrends={onScoutTrends} onAssetAction={onGrowthAssetAction} onProduce={onProduceMedia} onMediaAction={onMediaAction} />}
-        {view === "Leads" && <LeadsView growth={growth} />}
+        {view === "Leads" && <LeadsView outreach={outreach} busy={busy} onTriggerOutreach={onTriggerOutreach} />}
         {view === "Published" && <PublishedView growth={growth} media={media} />}
         {view === "Analytics" && <AnalyticsView growth={growth} />}
         {view === "Diagnostic" && <DiagnosticView overview={overview} today={today} onStatus={onStatus} />}
