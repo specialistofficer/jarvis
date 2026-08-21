@@ -34,68 +34,38 @@ function sourceRecords(row: { content_json: string } | null): SourceRecord[] {
 }
 
 function fallbackGrowthPack(goal: GrowthGoalRow, sources: SourceRecord[]): GrowthPack {
-  const citations = sources.slice(0, 2).map((source) => source.url);
-  const leadSources = sources.slice(0, 4);
-  while (leadSources.length < 2) leadSources.push({ title: `Direct ${goal.audience} interview target`, url: "" });
   return growthPackSchema.parse({
-    strategySummary: `Use a measurable problem-first content campaign for ${goal.name}. The content should help the target audience make one better wardrobe decision, route qualified people to ClothMatics, and treat clicks or installs—not post volume—as the outcome. Begin with manual publishing so each channel can be validated before any connector is authorized.`,
-    targetAudience: goal.audience,
-    messagingAngle: `Your wardrobe already contains useful answers; ClothMatics should help people see and act on them instead of pushing generic fashion inspiration.`,
+    strategySummary: `Use a measurable problem-first content campaign for ${goal.name}. The content should pitch paid software development, utility apps, and websites to generate revenue, routing qualified people to our services.`,
+    targetAudience: `Founders, businesses, and creators needing technical solutions, paid apps, or utilities.`,
+    messagingAngle: `Don't waste time struggling with low-quality tools. We build custom, revenue-generating paid apps and websites fast.`,
     contentPillars: [
-      "Practical wardrobe decisions people can test immediately",
-      "Common closet mistakes and their measurable cost",
-      "Behind-the-scenes evidence from building a useful wardrobe assistant",
+      "Showcasing high-quality utility apps we've built",
+      "Explaining the ROI of a custom software solution",
+      "Highlighting how fast we can ship a paid website or MVP"
     ],
     assets: [
       {
-        assetType: "instagram_post", channel: "instagram", title: "The hidden cost of a full wardrobe",
-        hook: "A full wardrobe can still leave you feeling like you have nothing to wear.",
-        body: "The problem is often not the number of clothes. It is that you cannot see which pieces work together, which ones repeat the same job, and what is actually missing. Before buying anything this week, pick ten items you wear most and list the outfits they already create. ClothMatics is being built to make that decision easier using your own wardrobe—not generic trend advice.",
-        cta: "Comment with the wardrobe decision that wastes the most time for you, or try ClothMatics when the founder adds the verified app link.",
-        productionNotes: "Create a five-slide carousel: problem, duplicate-use example, ten-item exercise, expected insight, ClothMatics CTA. Use an original screen recording or simple text graphics.", sourceUrls: citations,
+        assetType: "social_post", channel: "LinkedIn", title: "Why your business needs a custom utility app", hook: "Stop using 5 different SaaS tools when you could have one custom app.",
+        body: "Most businesses leak money paying for bloated SaaS subscriptions. We build custom utility apps and paid websites tailored exactly to your workflow. You own the product, you keep the margins.",
+        cta: "Comment 'BUILD' and we'll send you a zero-cost technical roadmap for your idea.",
+        productionNotes: "Create a carousel showing SaaS cost comparison vs one-time custom app cost.", sourceUrls: []
       },
       {
-        assetType: "linkedin_post", channel: "linkedin", title: "We are validating the decision before the AI",
-        hook: "Most wardrobe apps start with features. We are starting with a repeated decision.",
-        body: "For ClothMatics, the important question is not whether AI can recognize clothes. It is whether people repeatedly need help deciding what to wear, what they already own, or what not to buy. Our next experiment is deliberately small: ten qualified users, one narrow wardrobe decision, and a seven-day repeat-use measure. If the behavior does not repeat, the feature does not deserve to be built.",
-        cta: "If you actively organize your wardrobe and are willing to test one workflow, reply with the decision you repeat most often.",
-        productionNotes: "Publish as a founder build-in-public post. Keep the experiment numbers visible and avoid unsupported market-size claims.", sourceUrls: citations,
-      },
-      {
-        assetType: "x_thread", channel: "x", title: "Five-post wardrobe validation thread",
-        hook: "We are not building another generic AI closet app.",
-        body: "1/ We are testing one question: which wardrobe decision do people repeat often enough to need help?\n\n2/ Possible answers: what to wear, what matches, what is missing, or what not to buy.\n\n3/ Feature excitement is not demand. Repeat behavior is.\n\n4/ So our test is ten target users and one manually delivered outcome.\n\n5/ If fewer than two repeat it in seven days, we change the problem—not the marketing story.",
-        cta: "Reply with the last wardrobe decision that took you more than five minutes.",
-        productionNotes: "Post manually as a numbered thread. Record replies by problem category in Jarvis metrics notes.", sourceUrls: citations,
-      },
-      {
-        assetType: "youtube_short_script", channel: "youtube_shorts", title: "Why more clothes do not solve nothing-to-wear",
-        hook: "If your wardrobe is full but you still have nothing to wear, buying more may be the wrong fix.",
-        body: "[0–3s] Show an overfilled wardrobe. Voice: A full closet can still create zero clear outfits.\n[3–12s] Show ten frequently worn items. Voice: Pick the ten pieces you actually wear and count how many outfits they create.\n[12–22s] Show duplicates or isolated pieces. Voice: The gap is often visibility, not inventory.\n[22–30s] Show ClothMatics concept screen. Voice: We are building ClothMatics to help you understand your own wardrobe before you buy more.",
-        cta: "Comment ‘wardrobe’ with the decision you want the app to solve first.",
-        productionNotes: "9:16 vertical, 30 seconds, captions on every line. This is a script/storyboard; founder records or generates the video manually before publishing.", sourceUrls: citations,
-      },
-      {
-        assetType: "blog_brief", channel: "seo", title: "Digital wardrobe audit before buying clothes",
-        hook: "A practical, evidence-led guide to finding wardrobe gaps without buying first.",
-        body: "Outline: define a wardrobe gap; inventory by real-life routine; identify duplicates; build outfit combinations from frequently worn items; list true missing functions; run a seven-day no-buy test; explain how a digital wardrobe can reduce decision friction. Include a transparent ClothMatics validation section and invite readers to test one workflow.",
-        cta: "Join the ClothMatics validation group or use the verified product link once configured.",
-        productionNotes: "Target problem-intent queries, not broad fashion volume. Add original examples and screenshots before publishing.", sourceUrls: citations,
-      },
+        assetType: "video_script", channel: "YouTube Shorts", title: "We build revenue-generating apps", hook: "Want to launch a paid app but don't know how to code?",
+        body: "[0–3s] Show a person struggling with code. Voice: Building an app is hard.\n[3–12s] Show a sleek dashboard. Voice: We build paid utility apps and websites that actually generate revenue.\n[12–22s] Show a Stripe notification. Voice: From concept to launch in weeks, not months.\n[22–30s] Show our agency logo. Voice: Let us build your next digital product.",
+        cta: "Link in bio to get a quote.",
+        productionNotes: "Fast-paced B-roll of coding, dashboards, and money notifications. Upbeat electronic background track.", sourceUrls: []
+      }
     ],
-    distributionLeads: leadSources.map((source, index) => ({
-      leadType: index < 2 ? "customer_signal" : "community",
-      name: source.title.slice(0, 180), sourceUrl: source.url || null,
-      whyRelevant: source.url ? "This public record appeared in the sourced wardrobe-market scan and may reveal an existing user, builder, product, or discussion connected to the problem." : "A direct interview target is needed because public research alone cannot validate repeat usage.",
-      nextAction: source.url ? "Review the source manually, identify the relevant person or community, and record a specific non-spam outreach hypothesis before contact." : "Recruit one opted-in target user and ask about the last three real wardrobe decisions.",
-    })),
+    distributionLeads: [
+      { leadType: "community", name: "LinkedIn Founders Group", whyRelevant: "High concentration of people needing MVPs.", nextAction: "Share a case study of a recent app build.", sourceUrl: null }
+    ],
     experiment: {
-      hypothesis: "Problem-first organic content will produce at least ten qualified responses or product-link clicks before thirty posts are published.",
-      method: "Publish the approved assets manually across selected channels, use one consistent tagged product link, and record impressions, clicks, installs, leads and revenue by asset in Jarvis.",
-      successMetric: "At least ten qualified responses or clicks and at least three attributed installs from the first five approved assets.",
-      killCondition: "Change the message or channel if five published assets generate fewer than three qualified responses or clicks and zero installs.",
+      hypothesis: "Pitching 'we build paid apps' directly will generate at least 2 qualified leads.",
+      method: "Publish the LinkedIn carousel and YouTube short. Track direct inbound DMs.",
+      successMetric: "2 inbound DMs asking for a quote within 7 days.", killCondition: "Zero DMs or comments."
     },
-    evidenceLimits: ["Public market records do not prove ClothMatics conversion or retention.", "No publishing or product analytics connector is configured, so attribution requires founder-entered metrics.", "Draft assets must be reviewed for product accuracy and platform policy before publishing."],
+    evidenceLimits: ["No publishing connector configured.", "Attribution requires manual entry."]
   });
 }
 
@@ -104,7 +74,7 @@ function renderGrowthPack(pack: GrowthPack): string {
 }
 
 export async function runGrowthPlan(env: Env, jobId: string, payload: Record<string, unknown>): Promise<{ goalId: string; assetCount: number; leadCount: number; fallback: boolean }> {
-  const requestedGoalId = typeof payload.goalId === "string" ? payload.goalId : "goal_clothmatics_growth_v1";
+  const requestedGoalId = typeof payload.goalId === "string" ? payload.goalId : "goal_agency_v1";
   const [goal, research, rules, learnings] = await Promise.all([
     env.DB.prepare("SELECT * FROM growth_goals WHERE id = ? AND status = 'active'").bind(requestedGoalId).first<GrowthGoalRow>(),
     env.DB.prepare("SELECT content_json FROM deliverables WHERE deliverable_type = 'research_brief' ORDER BY created_at DESC LIMIT 1").first<{ content_json: string }>(),
@@ -125,8 +95,8 @@ export async function runGrowthPlan(env: Env, jobId: string, payload: Record<str
   let failure: string | null = null;
   try {
     const generated = await provider.generateStructured({
-      system: "You are Jarvis Growth Factory. Create a small, measurable organic growth pack for ClothMatics. Use only supplied evidence URLs; never invent facts, metrics, testimonials, product capabilities or links. Assets are drafts requiring founder approval. Do not claim they were published. Prefer useful problem-led content over generic promotion. Video output is a script/storyboard, not a generated video. All experiments must cost INR 0. Return only JSON matching the requested schema.",
-      prompt: `GROWTH GOAL:\n${JSON.stringify(goal)}\n\nFOUNDER RULES:\n${JSON.stringify(rules)}\n\nPRIOR LEARNINGS:\n${JSON.stringify(learnings.results)}\n\nALLOWED RESEARCH SOURCES:\n${JSON.stringify(sources)}\n\nReturn: strategySummary, targetAudience, messagingAngle, 3-5 contentPillars, 4-6 assets with assetType/channel/title/hook/body/cta/productionNotes/sourceUrls, 2-6 distributionLeads, experiment, and evidenceLimits. Create at least one YouTube short script and one social post.`,
+      system: `You are Jarvis Growth Factory. Create a small, measurable organic growth pack for the goal: ${goal.name}. Use only supplied evidence URLs; never invent facts, metrics, testimonials, product capabilities or links. Assets are drafts requiring founder approval. Do not claim they were published. Prefer useful problem-led content over generic promotion. Video output is a script/storyboard, not a generated video. All experiments must cost INR 0. Return only JSON matching the requested schema.`,
+      prompt: `GROWTH GOAL:\n${JSON.stringify(goal)}\n\nFOUNDER RULES:\n${JSON.stringify(rules)}\n\nPRIOR LEARNINGS:\n${JSON.stringify(learnings.results)}\n\nALLOWED RESEARCH SOURCES:\n${JSON.stringify(sources)}\n\nTask: You must create content assets (like videos, images, and posts) pitching paid apps, utility tools, websites, and development services to generate revenue. Provide realistic production notes for videos and detailed image prompts. Return: strategySummary, targetAudience, messagingAngle, 3-5 contentPillars, 4-6 assets with assetType/channel/title/hook/body/cta/productionNotes/sourceUrls, 2-6 distributionLeads, experiment, and evidenceLimits.`,
       schema: growthPackSchema, temperature: 0.2, maxTokens: 3600,
     });
     const allowedUrls = new Set(sources.map((source) => source.url));
@@ -178,7 +148,7 @@ export async function runGrowthPlan(env: Env, jobId: string, payload: Record<str
 }
 
 export async function runGrowthReview(env: Env, payload: Record<string, unknown>): Promise<{ goalId: string; metricRows: number; summary: string }> {
-  const goalId = typeof payload.goalId === "string" ? payload.goalId : "goal_clothmatics_growth_v1";
+  const goalId = typeof payload.goalId === "string" ? payload.goalId : "goal_agency_v1";
   const [goal, totals, assets, metricCount] = await Promise.all([
     env.DB.prepare("SELECT * FROM growth_goals WHERE id = ?").bind(goalId).first<GrowthGoalRow>(),
     env.DB.prepare(`SELECT COALESCE(SUM(impressions),0) impressions, COALESCE(SUM(views),0) views, COALESCE(SUM(clicks),0) clicks,

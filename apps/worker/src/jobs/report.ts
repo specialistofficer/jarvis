@@ -16,7 +16,7 @@ export async function generateDailyReport(env: Env): Promise<{ reportId: string;
     ).all<Record<string, unknown>>(),
     env.DB.prepare(
       `SELECT title, summary, overall_score, confidence_score, status FROM opportunities
-       WHERE venture_id = 'venture_clothmatics' ORDER BY updated_at DESC LIMIT 3`,
+       WHERE venture_id = 'venture_tech_agency' ORDER BY updated_at DESC LIMIT 3`,
     ).all<Record<string, unknown>>(),
     env.DB.prepare(
       `SELECT e.status, e.hypothesis, e.expected_result, e.actual_result, p.name AS project_name

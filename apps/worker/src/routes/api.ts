@@ -28,7 +28,7 @@ const researchRequestSchema = z.object({
 });
 
 const growthStartSchema = z.object({
-  goalId: z.string().trim().min(1).default("goal_clothmatics_growth_v1"),
+  goalId: z.string().trim().min(1).default("goal_agency_v1"),
 });
 
 const growthAssetActionSchema = z.object({
