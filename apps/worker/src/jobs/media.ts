@@ -18,6 +18,10 @@ function decodeBase64(value: string): Uint8Array {
 }
 
 function visualPrompt(asset: GrowthAssetRow): string {
+  // If the hook is a specific custom prompt, we just use it directly, maybe adding some quality boosters.
+  if (asset.title === "AI Generated Image") {
+    return `${asset.hook}, high quality, 8k resolution, photorealistic, cinematic lighting, highly detailed.`;
+  }
   return `Premium, high-tech, futuristic software agency image. Dark mode, sleek dashboard, neon accents, modern workspace. ${asset.hook} High quality, 8k resolution, photorealistic, cinematic lighting, no text, no watermark, clean composition.`;
 }
 

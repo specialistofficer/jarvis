@@ -382,10 +382,12 @@ If no action is needed, simply omit the JSON block entirely. Do not invent tools
       
       let replyText = generated.trim();
       let toolsToRun: any[] = [];
-      const jsonMatch = replyText.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+      
+      // Try to find a JSON block, even without markdown backticks
+      const jsonMatch = replyText.match(/\{[\s\S]*"tools"\s*:[\s\S]*\}/i);
       if (jsonMatch) {
         try {
-           const parsed = JSON.parse(jsonMatch[1]);
+           const parsed = JSON.parse(jsonMatch[0]);
            if (parsed.tools && Array.isArray(parsed.tools)) {
              toolsToRun = parsed.tools;
            }
@@ -403,7 +405,7 @@ If no action is needed, simply omit the JSON block entirely. Do not invent tools
             statements.push(env.DB.prepare(
               `INSERT INTO growth_assets (id, goal_id, job_id, asset_type, channel, title, hook, body, cta, production_notes, status)
                VALUES (?, 'goal_agency_v1', NULL, 'image', 'Website', ?, ?, ?, ?, ?, 'draft')`
-            ).bind(assetId, `AI Generated Image`, `Requested by founder`, `Prompt: ${tool.arguments.prompt}`, ``, `Asset created by Jarvis`));
+            ).bind(assetId, `AI Generated Image`, tool.arguments.prompt, tool.arguments.prompt, ``, `Asset created by Jarvis`));
             
             statements.push(env.DB.prepare(
               `INSERT INTO jobs (id, type, priority, payload, status, scheduled_at) VALUES (?, 'media_production', 90, ?, 'queued', datetime('now'))`
