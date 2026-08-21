@@ -57,14 +57,17 @@ function ResearchView({ deliverables, reports, busy, onResearch }: { deliverable
   );
 }
 
-function MediaView({ growth, media, busy, onGenerate, onAssetAction, onProduce, onMediaAction }: any) {
+function MediaView({ growth, media, busy, onGenerate, onScoutTrends, onAssetAction, onProduce, onMediaAction }: any) {
   const readyAssets = growth?.assets.filter((a: any) => a.status === "ready_to_publish") || [];
   const drafts = growth?.assets.filter((a: any) => a.status === "draft") || [];
   return (
     <div>
       <div className="flex-between" style={{marginBottom: 20}}>
         <h2>Content Pipeline</h2>
-        <button className="primary" disabled={busy} onClick={onGenerate}>Generate Pack</button>
+        <div style={{display: 'flex', gap: '10px'}}>
+          <button className="secondary" disabled={busy} onClick={onScoutTrends}>Scout Trends</button>
+          <button className="primary" disabled={busy} onClick={onGenerate}>Generate Pack</button>
+        </div>
       </div>
       <div className="panel">
         <div className="panel-title">Drafts Awaiting Approval</div>
@@ -328,6 +331,7 @@ export function App() {
   const logout = () => { api.logout(); setAuthState("required"); };
   const onStatus = async (status: "running" | "paused") => { setBusy(true); await api.systemStatus(status); await refresh(); setBusy(false); };
   const onGenerateGrowth = async () => { setBusy(true); await api.startGrowth(growth!.goal!.id); await refresh(); setBusy(false); };
+  const onScoutTrends = async () => { setBusy(true); await api.triggerScout(); alert("Scouting started! Check diagnostics."); await refresh(); setBusy(false); };
   const onGrowthAssetAction = async (asset: GrowthAsset, action: any) => { setBusy(true); await api.growthAssetAction(asset.id, action); await refresh(); setBusy(false); };
   const onProduceMedia = async (asset: GrowthAsset) => { setBusy(true); await api.produceMedia(asset.id); await refresh(); setBusy(false); };
   const onMediaAction = async (asset: MediaAsset, action: any) => { setBusy(true); await api.mediaAssetAction(asset.id, action); await refresh(); setBusy(false); };
@@ -365,7 +369,7 @@ export function App() {
       <main>
         <header><h1>{view}</h1></header>
         {view === "Research" && <ResearchView deliverables={deliverables} reports={reports} busy={busy} onResearch={onResearch} />}
-        {view === "Media" && <MediaView growth={growth} media={media} busy={busy} onGenerate={onGenerateGrowth} onAssetAction={onGrowthAssetAction} onProduce={onProduceMedia} onMediaAction={onMediaAction} />}
+        {view === "Media" && <MediaView growth={growth} media={media} busy={busy} onGenerate={onGenerateGrowth} onScoutTrends={onScoutTrends} onAssetAction={onGrowthAssetAction} onProduce={onProduceMedia} onMediaAction={onMediaAction} />}
         {view === "Leads" && <LeadsView growth={growth} />}
         {view === "Published" && <PublishedView growth={growth} media={media} />}
         {view === "Analytics" && <AnalyticsView growth={growth} />}

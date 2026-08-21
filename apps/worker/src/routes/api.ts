@@ -233,6 +233,12 @@ export async function handleApi(request: Request, env: Env): Promise<Response> {
       const summary = await runHeartbeat(env);
       return json({ ok: true, message: "Heartbeat triggered manually", summary });
     }
+    if (request.method === "POST" && path === "/api/system/trigger_scout") {
+      await env.DB.prepare(
+        `INSERT INTO jobs (id, type, priority, payload, status, scheduled_at) VALUES (?, 'trend_scout', 100, ?, 'queued', datetime('now'))`
+      ).bind(crypto.randomUUID(), JSON.stringify({ goalId: "goal_agency_v1" })).run();
+      return json({ ok: true, message: "Trend scout job queued" });
+    }
     if (request.method === "GET" && path === "/api/opportunities") {
       return json({ opportunities: await listOpportunities(env.DB) });
     }
