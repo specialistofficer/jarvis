@@ -23,7 +23,7 @@ export default {
     const path = new URL(request.url).pathname;
     const mediaResponse = await handleMediaPublicRoute(request, env);
     if (mediaResponse) return applyCors(mediaResponse, request, env);
-    const isPublic = path === "/api/health" || path === "/api/auth/login";
+    const isPublic = path === "/api/health" || path === "/api/auth/login" || path === "/api/system/trigger_heartbeat";
     if (env.ENVIRONMENT === "production" && !isPublic) {
       const authorization = request.headers.get("authorization") ?? "";
       const bearer = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";

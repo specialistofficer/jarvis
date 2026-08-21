@@ -23,25 +23,23 @@ function visualPrompt(asset: GrowthAssetRow): string {
 
 async function tryNvidiaImage(env: Env, prompt: string): Promise<{ bytes: Uint8Array; model: string } | null> {
   if (!env.NVIDIA_API_KEY || env.NVIDIA_FREE_ALLOWANCE_REMAINING !== "true") return null;
-  const model = env.NVIDIA_IMAGE_MODEL || "stabilityai/stable-diffusion-xl";
-  const endpoint = model === "stabilityai/stable-diffusion-xl"
-    ? "https://ai.api.nvidia.com/v1/genai/stabilityai/stable-diffusion-xl"
-    : `https://ai.api.nvidia.com/v1/genai/${model}`;
+  const model = "stabilityai/stable-diffusion-3-medium";
+  const endpoint = "https://ai.api.nvidia.com/v1/images/generations";
   const response = await fetch(endpoint, {
     method: "POST",
     signal: AbortSignal.timeout(55_000),
     headers: { Authorization: `Bearer ${env.NVIDIA_API_KEY}`, "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify(model === "stabilityai/stable-diffusion-xl" ? {
-      text_prompts: [
-        { text: prompt, weight: 1 },
-        { text: "text, watermark, distorted clothing, extra limbs, low quality", weight: -1 },
-      ],
-      height: 1024, width: 1024, cfg_scale: 5, steps: 25, samples: 1, seed: 0,
-    } : { prompt, height: 1024, width: 1024, steps: 4, samples: 1, seed: 0 }),
+    body: JSON.stringify({
+      model,
+      prompt,
+      response_format: "b64_json",
+      size: "1024x1024"
+    }),
   });
-  const body = await response.json().catch(() => ({})) as NvidiaImageResponse;
-  const encoded = body.artifacts?.[0]?.base64;
-  if (!response.ok || !encoded) throw new Error(`NVIDIA visual endpoint ${response.status}: ${body.error?.message ?? "no image returned"}`);
+  
+  const body = await response.json().catch(() => ({})) as any;
+  const encoded = body.data?.[0]?.b64_json;
+  if (!response.ok || !encoded) throw new Error(`NVIDIA visual endpoint ${response.status}: ${JSON.stringify(body)}`);
   return { bytes: decodeBase64(encoded), model };
 }
 

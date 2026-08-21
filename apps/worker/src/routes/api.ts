@@ -228,6 +228,11 @@ export async function handleApi(request: Request, env: Env): Promise<Response> {
         costPolicy: { allowPaidSpend: false, maxCostInr: 0 },
       });
     }
+    if (request.method === "POST" && path === "/api/system/trigger_heartbeat") {
+      const { runHeartbeat } = await import("../jobs/runner");
+      const summary = await runHeartbeat(env);
+      return json({ ok: true, message: "Heartbeat triggered manually", summary });
+    }
     if (request.method === "GET" && path === "/api/opportunities") {
       return json({ opportunities: await listOpportunities(env.DB) });
     }

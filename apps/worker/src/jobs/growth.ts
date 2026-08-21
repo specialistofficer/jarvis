@@ -45,20 +45,33 @@ function fallbackGrowthPack(goal: GrowthGoalRow, sources: SourceRecord[]): Growt
     ],
     assets: [
       {
-        assetType: "social_post", channel: "LinkedIn", title: "Why your business needs a custom utility app", hook: "Stop using 5 different SaaS tools when you could have one custom app.",
+        assetType: "linkedin_post", channel: "LinkedIn", title: "Why your business needs a custom utility app", hook: "Stop using 5 different SaaS tools when you could have one custom app.",
         body: "Most businesses leak money paying for bloated SaaS subscriptions. We build custom utility apps and paid websites tailored exactly to your workflow. You own the product, you keep the margins.",
         cta: "Comment 'BUILD' and we'll send you a zero-cost technical roadmap for your idea.",
         productionNotes: "Create a carousel showing SaaS cost comparison vs one-time custom app cost.", sourceUrls: []
       },
       {
-        assetType: "video_script", channel: "YouTube Shorts", title: "We build revenue-generating apps", hook: "Want to launch a paid app but don't know how to code?",
+        assetType: "youtube_short_script", channel: "YouTube Shorts", title: "We build revenue-generating apps", hook: "Want to launch a paid app but don't know how to code?",
         body: "[0–3s] Show a person struggling with code. Voice: Building an app is hard.\n[3–12s] Show a sleek dashboard. Voice: We build paid utility apps and websites that actually generate revenue.\n[12–22s] Show a Stripe notification. Voice: From concept to launch in weeks, not months.\n[22–30s] Show our agency logo. Voice: Let us build your next digital product.",
         cta: "Link in bio to get a quote.",
         productionNotes: "Fast-paced B-roll of coding, dashboards, and money notifications. Upbeat electronic background track.", sourceUrls: []
+      },
+      {
+        assetType: "x_thread", channel: "X", title: "How we ship MVPs in 2 weeks", hook: "Here is exactly how we ship revenue-generating MVPs in 14 days without writing bad code.",
+        body: "1/ We don't start with code. We start with your business problem.\n2/ We design the exact flow that gets a user to pay.\n3/ We build the backend securely while you focus on sales.\n4/ In two weeks, you have a product.",
+        cta: "DM us 'MVP' if you want to build yours.",
+        productionNotes: "Text only thread.", sourceUrls: []
+      },
+      {
+        assetType: "instagram_post", channel: "Instagram", title: "Stop paying for SaaS", hook: "Are you paying $500/mo for 4 different tools?",
+        body: "We built a custom internal tool for a client that saved them $6000 a year. Custom apps aren't just for big tech.",
+        cta: "Message us to calculate your custom app ROI.",
+        productionNotes: "High contrast image with a large ROI number.", sourceUrls: []
       }
     ],
     distributionLeads: [
-      { leadType: "community", name: "LinkedIn Founders Group", whyRelevant: "High concentration of people needing MVPs.", nextAction: "Share a case study of a recent app build.", sourceUrl: null }
+      { leadType: "community", name: "LinkedIn Founders Group", whyRelevant: "High concentration of people needing MVPs.", nextAction: "Share a case study of a recent app build.", sourceUrl: null },
+      { leadType: "customer_signal", name: "X SaaS Builders", whyRelevant: "People discussing high software costs.", nextAction: "Reply to complaints about SaaS bills.", sourceUrl: null }
     ],
     experiment: {
       hypothesis: "Pitching 'we build paid apps' directly will generate at least 2 qualified leads.",
@@ -121,7 +134,7 @@ export async function runGrowthPlan(env: Env, jobId: string, payload: Record<str
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')`,
     ).bind(assetId, goal.id, jobId, asset.assetType, asset.channel, asset.title, asset.hook, asset.body, asset.cta, asset.productionNotes, JSON.stringify(asset.sourceUrls)));
     statements.push(env.DB.prepare(
-      `INSERT INTO jobs (id, type, priority, payload, status) VALUES (?, 'media_production', 90, ?, 'queued')`
+      `INSERT INTO jobs (id, type, priority, payload, status, scheduled_at) VALUES (?, 'media_production', 90, ?, 'queued', datetime('now'))`
     ).bind(crypto.randomUUID(), JSON.stringify({ growthAssetId: assetId })));
   }
   for (const lead of pack.distributionLeads) statements.push(env.DB.prepare(
