@@ -15,4 +15,6 @@ export interface Env {
   SESSION_SIGNING_SECRET?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  META_CLIENT_ID?: string;
+  META_CLIENT_SECRET?: string;
 }

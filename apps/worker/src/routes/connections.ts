@@ -18,7 +18,14 @@ export async function handleConnectionsApi(request: Request, env: Env): Promise<
         : "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/yt-analytics.readonly";
       const state = crypto.randomUUID();
       authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent&state=${state}`;
-    } else if (provider === "instagram" || provider === "linkedin" || provider === "x") {
+    } else if (provider === "instagram") {
+      const clientId = env.META_CLIENT_ID;
+      if (!clientId) return new Response(JSON.stringify({ error: "Meta Client ID not configured" }), { status: 500, headers: { "Content-Type": "application/json" } });
+      const redirectUri = `${env.DASHBOARD_ORIGIN}/oauth/callback/${provider}`;
+      const scopes = "instagram_basic,instagram_content_publish,instagram_manage_insights,pages_show_list,pages_read_engagement";
+      const state = crypto.randomUUID();
+      authUrl = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${clientId}&redirect_uri=${redirectUri}&state=${state}&scope=${encodeURIComponent(scopes)}&response_type=code`;
+    } else if (provider === "linkedin" || provider === "x") {
       return new Response(JSON.stringify({ error: `Provider ${provider} not fully implemented yet` }), { status: 501, headers: { "Content-Type": "application/json" } });
     } else {
       return new Response(JSON.stringify({ error: "Unknown provider" }), { status: 400, headers: { "Content-Type": "application/json" } });
@@ -48,6 +55,16 @@ export async function handleConnectionsApi(request: Request, env: Env): Promise<
       });
       if (!tokenResponse.ok) return new Response(JSON.stringify({ error: "Token exchange failed: " + await tokenResponse.text() }), { status: 400, headers: { "Content-Type": "application/json" } });
       tokens = await tokenResponse.json();
+    } else if (provider === "instagram") {
+      const tokenResponse = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?client_id=${env.META_CLIENT_ID}&redirect_uri=${redirectUri}&client_secret=${env.META_CLIENT_SECRET}&code=${code}`, {
+        method: "GET"
+      });
+      if (!tokenResponse.ok) return new Response(JSON.stringify({ error: "Token exchange failed: " + await tokenResponse.text() }), { status: 400, headers: { "Content-Type": "application/json" } });
+      tokens = await tokenResponse.json();
+      
+      // Meta provides long-lived tokens via a separate endpoint if needed, but for now we'll just store the short-lived/long-lived token returned.
+      // Typical response: { access_token: "...", token_type: "bearer", expires_in: 5183999 }
+      if (!tokens.refresh_token) tokens.refresh_token = null; 
     } else {
       return new Response(JSON.stringify({ error: "Not implemented" }), { status: 501, headers: { "Content-Type": "application/json" } });
     }
@@ -66,7 +83,7 @@ export async function handleConnectionsApi(request: Request, env: Env): Promise<
     const encRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
     const expiresAt = new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString();
     const connectionId = `conn_${provider}`;
-    const providerName = provider === "google_drive" ? "Google Drive" : provider === "youtube" ? "YouTube" : provider;
+    const providerName = provider === "google_drive" ? "Google Drive" : provider === "youtube" ? "YouTube" : provider === "instagram" ? "Instagram" : provider;
     const connectionType = provider === "google_drive" ? "warehouse" : "channel";
     const caps = provider === "google_drive" ? '["storage"]' : '["publish", "analytics"]';
     
