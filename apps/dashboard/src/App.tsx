@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { OpportunityAction, OpportunityRecord, TodaySummary } from "@jarvis/types";
 import { api, ApiError } from "./api";
-import type { AssistantMessage, AssistantProposal, DeliverableRecord, ReportRecord, SystemOverview } from "./api";
+import type { AssistantMessage, AssistantProposal, DeliverableRecord, GrowthAsset, GrowthOverview, ReportRecord, SystemOverview } from "./api";
 
-type View = "Deliverables" | "Assistant" | "Opportunities" | "Activity" | "Settings";
+type View = "Growth" | "Deliverables" | "Assistant" | "Opportunities" | "Activity" | "Settings";
 
 interface SpeechRecognitionEventLike { results: { [index: number]: { [index: number]: { transcript: string } } }; }
 interface SpeechRecognitionLike {
@@ -17,10 +17,10 @@ type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 declare global { interface Window { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor; } }
 
 const nav: Array<{ view: View; icon: string; label: string }> = [
+  { view: "Growth", icon: "↗", label: "Growth" },
   { view: "Deliverables", icon: "▤", label: "Results" },
   { view: "Assistant", icon: "J", label: "Jarvis" },
-  { view: "Opportunities", icon: "◇", label: "Ideas" },
-  { view: "Activity", icon: "↗", label: "Activity" },
+  { view: "Activity", icon: "◷", label: "Activity" },
   { view: "Settings", icon: "⚙", label: "Settings" },
 ];
 
@@ -45,6 +45,44 @@ function speak(text: string): void {
 function ScoreRing({ value }: { value: number }) {
   const color = value >= 70 ? "#c9f658" : value >= 50 ? "#ffca6a" : "#83918e";
   return <div className="score-ring" style={{ background: `conic-gradient(${color} ${value * 3.6}deg, #24312e 0deg)` }}><span>{Math.round(value)}</span></div>;
+}
+
+function GrowthView({ growth, busy, onGenerate, onAssetAction, onMetric, onReview }: {
+  growth: GrowthOverview | null; busy: boolean; onGenerate: () => Promise<void>;
+  onAssetAction: (asset: GrowthAsset, action: "approve" | "reject" | "mark_published", externalUrl?: string) => Promise<void>;
+  onMetric: (input: { assetId?: string; channel: string; impressions: number; views: number; clicks: number; installs: number; leads: number; revenueInr: number; notes?: string }) => Promise<void>;
+  onReview: () => Promise<void>;
+}) {
+  const [assetId, setAssetId] = useState(""); const [channel, setChannel] = useState("instagram");
+  const [impressions, setImpressions] = useState("0"); const [views, setViews] = useState("0"); const [clicks, setClicks] = useState("0");
+  const [installs, setInstalls] = useState("0"); const [leads, setLeads] = useState("0"); const [revenue, setRevenue] = useState("0"); const [notes, setNotes] = useState("");
+  const [copied, setCopied] = useState<string | null>(null);
+  if (!growth) return <div className="skeleton-block" />;
+  const goal = growth.goal;
+  const totals = growth.totals;
+  const target = Number(goal?.target_value ?? 0); const current = Number(totals[goal?.primary_metric as keyof typeof totals] ?? goal?.current_value ?? 0);
+  const progress = target > 0 ? Math.min(100, current / target * 100) : 0;
+  const ready = growth.assets.filter((asset) => asset.status === "ready_to_publish").length;
+  const published = growth.assets.filter((asset) => asset.status === "published").length;
+  const latestReview = growth.reviews[0];
+  const copyAsset = async (asset: GrowthAsset) => {
+    await navigator.clipboard.writeText(`${asset.hook}\n\n${asset.body}\n\n${asset.cta}`); setCopied(asset.id); setTimeout(() => setCopied(null), 1800);
+  };
+  return <div className="simple-page growth-page">
+    <div className="page-intro"><span className="eyebrow">ClothMatics autonomous loop</span><h1>Growth Engine</h1><p>Jarvis content aur experiments create karta hai. Aap approval/publishing control karte hain; performance data next decision ko improve karta hai.</p></div>
+    <section className="growth-command panel"><div><span className="eyebrow">North-star goal</span><h2>{goal?.name ?? "No active growth goal"}</h2><p>{goal?.objective ?? "Initialize the ClothMatics growth engine."}</p></div><button className="primary" disabled={busy || !goal} onClick={() => void onGenerate()}>{busy ? "Working…" : "Generate new growth pack"}</button></section>
+    {goal && <section className="growth-scoreboard">
+      <div className="metric-card primary-metric"><small>{goal.primary_metric} goal</small><strong>{current} / {target}</strong><div className="progress-track"><span style={{ width: `${progress}%` }} /></div><p>Deadline {localTime(goal.deadline)}</p></div>
+      <div className="metric-card"><small>Content assets</small><strong>{growth.assets.length}</strong><p>{ready} ready · {published} published</p></div>
+      <div className="metric-card"><small>Clicks → installs</small><strong>{Number(totals.clicks ?? 0)} → {Number(totals.installs ?? 0)}</strong><p>{Number(totals.impressions ?? 0)} impressions</p></div>
+      <div className="metric-card"><small>Leads / revenue</small><strong>{Number(totals.leads ?? 0)} / ₹{Number(totals.revenue_inr ?? 0)}</strong><p>Only recorded outcomes</p></div>
+    </section>}
+    <section className="growth-loop panel"><span className="eyebrow">How it operates</span><div><span><b>1</b><strong>Research</strong><small>Jarvis reads evidence</small></span><i>→</i><span><b>2</b><strong>Create</strong><small>Posts, video, leads</small></span><i>→</i><span><b>3</b><strong>Approve</strong><small>You control publishing</small></span><i>→</i><span><b>4</b><strong>Measure</strong><small>Clicks, installs, revenue</small></span><i>→</i><span><b>5</b><strong>Learn</strong><small>Repeat or kill</small></span></div></section>
+    <section className="panel"><div className="section-title"><div><span className="eyebrow">Factory output</span><h2>Posts & video scripts</h2></div><span className="done-count">{growth.assets.length} created</span></div><div className="asset-grid">{growth.assets.map((asset) => <article className={`growth-asset ${asset.status}`} key={asset.id}><div className="asset-head"><span>{asset.channel.replaceAll("_", " ")}</span><small>{asset.asset_type.replaceAll("_", " ")} · {asset.status.replaceAll("_", " ")}</small></div><h3>{asset.title}</h3><blockquote>{asset.hook}</blockquote><p>{asset.body}</p><div className="asset-cta"><small>CTA</small><strong>{asset.cta}</strong></div><details><summary>Production notes & sources</summary><p>{asset.production_notes}</p>{(JSON.parse(asset.source_urls_json || "[]") as string[]).map((url) => <a href={url} target="_blank" rel="noreferrer" key={url}>Evidence source ↗</a>)}</details><div className="asset-actions"><button onClick={() => void copyAsset(asset)}>{copied === asset.id ? "Copied ✓" : "Copy content"}</button>{asset.status === "draft" && <><button className="primary" disabled={busy} onClick={() => void onAssetAction(asset, "approve")}>Approve</button><button className="danger" disabled={busy} onClick={() => void onAssetAction(asset, "reject")}>Reject</button></>}{asset.status === "ready_to_publish" && <button className="primary" disabled={busy} onClick={() => { const url = window.prompt("Published post URL (optional)") ?? undefined; void onAssetAction(asset, "mark_published", url || undefined); }}>Mark published</button>}{asset.external_url && <a className="button-link" href={asset.external_url} target="_blank" rel="noreferrer">View live ↗</a>}</div></article>)}{!growth.assets.length && <div className="empty-state">No growth assets yet. Generate the first growth pack.</div>}</div></section>
+    <section className="panel"><span className="eyebrow">Distribution pipeline</span><h2>Leads worth reviewing</h2><p>Yeh verified contacts nahi hain. Jarvis ne public signals se research/community targets nikale hain; outreach se pehle manual verification required hai.</p><div className="lead-list">{growth.leads.map((lead) => <div key={lead.id}><span>{lead.lead_type.replaceAll("_", " ")}</span><div><strong>{lead.source_url ? <a href={lead.source_url} target="_blank" rel="noreferrer">{lead.name} ↗</a> : lead.name}</strong><p>{lead.why_relevant}</p><small>Next: {lead.next_action}</small></div></div>)}{!growth.leads.length && <p>No distribution leads created yet.</p>}</div></section>
+    {goal && <section className="panel metric-entry"><div><span className="eyebrow">Close the feedback loop</span><h2>Record published performance</h2><p>Official analytics connector abhi configured nahi hai, isliye first version mein exact asset metrics yahan enter karein.</p></div><form onSubmit={(event) => { event.preventDefault(); void onMetric({ assetId: assetId || undefined, channel, impressions: Number(impressions), views: Number(views), clicks: Number(clicks), installs: Number(installs), leads: Number(leads), revenueInr: Number(revenue), notes: notes || undefined }); }}><select value={assetId} onChange={(event) => { setAssetId(event.target.value); const selected = growth.assets.find((item) => item.id === event.target.value); if (selected) setChannel(selected.channel); }}><option value="">Overall / no asset</option>{growth.assets.filter((asset) => asset.status === "published").map((asset) => <option key={asset.id} value={asset.id}>{asset.title}</option>)}</select><input value={channel} onChange={(event) => setChannel(event.target.value)} placeholder="Channel" required /><label>Impressions<input type="number" min="0" value={impressions} onChange={(event) => setImpressions(event.target.value)} /></label><label>Views<input type="number" min="0" value={views} onChange={(event) => setViews(event.target.value)} /></label><label>Clicks<input type="number" min="0" value={clicks} onChange={(event) => setClicks(event.target.value)} /></label><label>Installs<input type="number" min="0" value={installs} onChange={(event) => setInstalls(event.target.value)} /></label><label>Leads<input type="number" min="0" value={leads} onChange={(event) => setLeads(event.target.value)} /></label><label>Revenue ₹<input type="number" min="0" step="0.01" value={revenue} onChange={(event) => setRevenue(event.target.value)} /></label><textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="What happened?" /><button className="primary" disabled={busy}>Save metrics</button></form></section>}
+    <section className="panel growth-review"><div className="section-title"><div><span className="eyebrow">Learning engine</span><h2>Latest performance review</h2></div>{goal && <button disabled={busy} onClick={() => void onReview()}>Run review</button>}</div><p>{latestReview?.summary ?? "No review yet. Publish an asset and record metrics; Jarvis will refuse to invent a winner without data."}</p>{latestReview && <div className="report-actions">{(JSON.parse(latestReview.recommendations_json || "[]") as string[]).map((item, index) => <div key={index}><span>{index + 1}</span><strong>{item}</strong></div>)}</div>}</section>
+  </div>;
 }
 
 function AssistantView({ today, overview, messages, proposal, sending, onSend, onDecision }: {
@@ -186,7 +224,7 @@ function SettingsView({ today, overview, onStatus, onRun, onLogout }: { today: T
 }
 
 export function App() {
-  const [view, setView] = useState<View>("Deliverables");
+  const [view, setView] = useState<View>("Growth");
   const [today, setToday] = useState<TodaySummary | null>(null);
   const [opportunities, setOpportunities] = useState<OpportunityRecord[]>([]);
   const [overview, setOverview] = useState<SystemOverview | null>(null);
@@ -194,14 +232,15 @@ export function App() {
   const [proposal, setProposal] = useState<AssistantProposal | null>(null);
   const [deliverables, setDeliverables] = useState<DeliverableRecord[]>([]);
   const [reports, setReports] = useState<ReportRecord[]>([]);
+  const [growth, setGrowth] = useState<GrowthOverview | null>(null);
   const [authState, setAuthState] = useState<"checking" | "required" | "authenticated">("checking");
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState<string | null>(null); const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const [todayData, opportunityData, overviewData, assistantData, deliverableData, reportData] = await Promise.all([api.today(), api.opportunities(), api.systemOverview(), api.assistantHistory(), api.deliverables(), api.reports()]);
-      setToday(todayData); setOpportunities(opportunityData.opportunities); setOverview(overviewData); setMessages(assistantData.messages); setProposal(assistantData.proposal); setDeliverables(deliverableData.deliverables); setReports(reportData.reports); setError(null); setAuthState("authenticated");
+      const [todayData, opportunityData, overviewData, assistantData, deliverableData, reportData, growthData] = await Promise.all([api.today(), api.opportunities(), api.systemOverview(), api.assistantHistory(), api.deliverables(), api.reports(), api.growthOverview()]);
+      setToday(todayData); setOpportunities(opportunityData.opportunities); setOverview(overviewData); setMessages(assistantData.messages); setProposal(assistantData.proposal); setDeliverables(deliverableData.deliverables); setReports(reportData.reports); setGrowth(growthData); setError(null); setAuthState("authenticated");
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) setAuthState("required");
       else { setError(cause instanceof Error ? cause.message : "Jarvis is temporarily unavailable"); setAuthState("authenticated"); }
@@ -215,6 +254,10 @@ export function App() {
   const onRun = async () => { if (!confirmBrowserAction("Run one due job now?")) return; setBusy(true); try { await api.runHeartbeat(); await refresh(); } finally { setBusy(false); } };
   const onOpportunityAction = async (id: string, action: OpportunityAction["action"], title: string) => { if (!confirmBrowserAction(`${action.replaceAll("_", " ")} “${title}”?`)) return; setBusy(true); try { await api.opportunityAction(id, { action }); await refresh(); } finally { setBusy(false); } };
   const onResearch = async (topic: string) => { setBusy(true); setError(null); try { const result = await api.requestResearch(topic.trim()); setError(result.message + " Activity page par progress check kar sakte hain."); await refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Research could not be queued"); } finally { setBusy(false); } };
+  const onGenerateGrowth = async () => { if (!growth?.goal || !confirmBrowserAction("Generate a fresh ClothMatics growth pack?")) return; setBusy(true); setError(null); try { const result = await api.startGrowth(growth.goal.id); setError(result.message + " Activity page par progress dikhega."); await refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Growth Factory could not be queued"); } finally { setBusy(false); } };
+  const onGrowthAssetAction = async (asset: GrowthAsset, action: "approve" | "reject" | "mark_published", externalUrl?: string) => { if (!confirmBrowserAction(`${action.replaceAll("_", " ")} “${asset.title}”?`)) return; setBusy(true); try { await api.growthAssetAction(asset.id, action, externalUrl); await refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Asset action failed"); } finally { setBusy(false); } };
+  const onGrowthMetric = async (input: { assetId?: string; channel: string; impressions: number; views: number; clicks: number; installs: number; leads: number; revenueInr: number; notes?: string }) => { if (!growth?.goal) return; setBusy(true); try { await api.addGrowthMetric({ goalId: growth.goal.id, metricDate: new Date().toISOString().slice(0, 10), ...input }); await refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Metrics could not be saved"); } finally { setBusy(false); } };
+  const onGrowthReview = async () => { if (!growth?.goal) return; setBusy(true); try { const result = await api.reviewGrowth(growth.goal.id); setError(result.message + " Next heartbeat ise process karega."); await refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Review could not be queued"); } finally { setBusy(false); } };
   const sendMessage = async (text: string): Promise<string | null> => {
     setBusy(true); setError(null); setMessages((current) => [...current, { id: `local-${crypto.randomUUID()}`, role: "user", content: text, created_at: new Date().toISOString() }]);
     try { const result = await api.assistantChat(text); setMessages((current) => [...current, { id: `local-${crypto.randomUUID()}`, role: "assistant", content: result.reply, created_at: new Date().toISOString() }]); setProposal(result.proposal); return result.reply; }
@@ -231,5 +274,5 @@ export function App() {
   if (authState === "checking") return <div className="boot-screen"><div className="jarvis-orb thinking"><Mark active /></div><p>Connecting to Jarvis…</p></div>;
   if (authState === "required") return <div className="auth-shell"><form className="auth-card" onSubmit={async (event) => { event.preventDefault(); setBusy(true); setAuthError(null); try { await api.login(email, password); setPassword(""); await refresh(); } catch (cause) { setAuthError(cause instanceof Error ? cause.message : "Login failed"); } finally { setBusy(false); } }}><Mark active /><span className="eyebrow">Private founder access</span><h1>Sign in to Jarvis</h1><p>Enter your founder credentials. Email is never pre-filled or bundled into the website.</p><label htmlFor="email">Email</label><input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" placeholder="you@example.com" required /><label htmlFor="password">Password</label><input id="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" placeholder="Your password" required />{authError && <div className="auth-error">{authError}</div>}<button className="primary" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button><small>One founder account · secure seven-day session</small></form></div>;
 
-  return <div className="app-shell"><aside><div className="brand"><Mark active /><div><strong>Jarvis</strong><small>Founder assistant</small></div></div><nav>{nav.map((item) => <button key={item.view} className={view === item.view ? "active" : ""} onClick={() => setView(item.view)}><span>{item.icon}</span>{item.label}</button>)}</nav><div className="sidebar-bottom"><div><span className={`status-dot ${today?.systemStatus ?? "paused"}`} /><span><strong>{today?.systemStatus ?? "offline"}</strong><small>₹0 guard active</small></span></div><button className="logout-link" onClick={logout}>↪ Log out</button></div></aside><main>{view !== "Assistant" && <header><div><span className="eyebrow">Jarvis / {view}</span></div><div className="header-actions"><button onClick={() => void refresh()} disabled={busy}>↻ Refresh</button><button className="logout-button" onClick={logout}>Log out</button></div></header>}{error && <div className="error-banner"><strong>Jarvis notice</strong><span>{error}</span></div>}{view === "Deliverables" && <DeliverablesView deliverables={deliverables} reports={reports} busy={busy} onResearch={onResearch} />}{view === "Assistant" && <AssistantView today={today} overview={overview} messages={messages} proposal={proposal} sending={busy} onSend={sendMessage} onDecision={decideProposal} />}{view === "Opportunities" && <OpportunitiesView items={opportunities} onAction={onOpportunityAction} />}{view === "Activity" && <ActivityView overview={overview} />}{view === "Settings" && <SettingsView today={today} overview={overview} onStatus={onStatus} onRun={onRun} onLogout={logout} />}</main><nav className="bottom-nav">{nav.map((item) => <button key={item.view} className={view === item.view ? "active" : ""} onClick={() => setView(item.view)}><span>{item.icon}</span><small>{item.label}</small></button>)}</nav></div>;
+  return <div className="app-shell"><aside><div className="brand"><Mark active /><div><strong>Jarvis</strong><small>Growth operator</small></div></div><nav>{nav.map((item) => <button key={item.view} className={view === item.view ? "active" : ""} onClick={() => setView(item.view)}><span>{item.icon}</span>{item.label}</button>)}</nav><div className="sidebar-bottom"><div><span className={`status-dot ${today?.systemStatus ?? "paused"}`} /><span><strong>{today?.systemStatus ?? "offline"}</strong><small>₹0 guard active</small></span></div><button className="logout-link" onClick={logout}>↪ Log out</button></div></aside><main>{view !== "Assistant" && <header><div><span className="eyebrow">Jarvis / {view}</span></div><div className="header-actions"><button onClick={() => void refresh()} disabled={busy}>↻ Refresh</button><button className="logout-button" onClick={logout}>Log out</button></div></header>}{error && <div className="error-banner"><strong>Jarvis notice</strong><span>{error}</span></div>}{view === "Growth" && <GrowthView growth={growth} busy={busy} onGenerate={onGenerateGrowth} onAssetAction={onGrowthAssetAction} onMetric={onGrowthMetric} onReview={onGrowthReview} />}{view === "Deliverables" && <DeliverablesView deliverables={deliverables} reports={reports} busy={busy} onResearch={onResearch} />}{view === "Assistant" && <AssistantView today={today} overview={overview} messages={messages} proposal={proposal} sending={busy} onSend={sendMessage} onDecision={decideProposal} />}{view === "Opportunities" && <OpportunitiesView items={opportunities} onAction={onOpportunityAction} />}{view === "Activity" && <ActivityView overview={overview} />}{view === "Settings" && <SettingsView today={today} overview={overview} onStatus={onStatus} onRun={onRun} onLogout={logout} />}</main><nav className="bottom-nav">{nav.map((item) => <button key={item.view} className={view === item.view ? "active" : ""} onClick={() => setView(item.view)}><span>{item.icon}</span><small>{item.label}</small></button>)}</nav></div>;
 }

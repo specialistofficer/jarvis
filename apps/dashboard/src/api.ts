@@ -1,6 +1,9 @@
 import type { OpportunityAction, OpportunityRecord, TodaySummary } from "@jarvis/types";
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
+const configuredApiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "");
+const API_BASE = configuredApiBase || (typeof window !== "undefined" && window.location.hostname.endsWith("pages.dev")
+  ? "https://jarvis-api.chiragsharma376.workers.dev"
+  : "");
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
@@ -57,9 +60,25 @@ export interface AssistantMessage {
 
 export interface AssistantProposal {
   id: string;
-  type: "pause_system" | "resume_system" | "run_heartbeat" | "run_scout" | "deep_research" | "add_rule";
+  type: "pause_system" | "resume_system" | "run_heartbeat" | "run_scout" | "run_growth" | "deep_research" | "add_rule";
   summary: string;
   expiresAt: string;
+}
+
+export interface GrowthGoal {
+  id: string; name: string; objective: string; audience: string; offer: string; primary_metric: string;
+  target_value: number; current_value: number; channels_json: string; deadline: string | null; status: string;
+}
+export interface GrowthAsset {
+  id: string; goal_id: string; asset_type: string; channel: string; title: string; hook: string; body: string;
+  cta: string; production_notes: string; source_urls_json: string; status: string; external_url: string | null; created_at: string;
+}
+export interface GrowthLead { id: string; lead_type: string; name: string; source_url: string | null; why_relevant: string; next_action: string; status: string; }
+export interface GrowthMetric { id: string; goal_id: string; asset_id: string | null; metric_date: string; channel: string; impressions: number; views: number; clicks: number; installs: number; leads: number; revenue_inr: number; notes: string | null; }
+export interface GrowthReview { id: string; summary: string; metrics_json: string; winners_json: string; failures_json: string; recommendations_json: string; created_at: string; }
+export interface GrowthOverview {
+  goal: GrowthGoal | null; assets: GrowthAsset[]; leads: GrowthLead[]; metrics: GrowthMetric[]; reviews: GrowthReview[];
+  experiments: Array<Record<string, unknown>>; totals: { impressions?: number; views?: number; clicks?: number; installs?: number; leads?: number; revenue_inr?: number };
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -68,7 +87,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...init?.headers },
   });
-  const body = await response.json() as T & { error?: string };
+  const raw = await response.text();
+  let body: T & { error?: string };
+  try {
+    body = JSON.parse(raw) as T & { error?: string };
+  } catch {
+    const isHtml = raw.trimStart().startsWith("<");
+    throw new ApiError(isHtml
+      ? "Dashboard API configuration error: website returned HTML instead of the Jarvis API. Please refresh after deployment completes."
+      : `Jarvis API returned an empty or invalid response (${response.status}).`, response.status);
+  }
   if (!response.ok) throw new ApiError(body.error ?? `Request failed (${response.status})`, response.status);
   return body;
 }
@@ -97,6 +125,19 @@ export const api = {
   opportunities: () => request<{ opportunities: OpportunityRecord[] }>("/api/opportunities"),
   deliverables: () => request<{ deliverables: DeliverableRecord[] }>("/api/deliverables"),
   reports: () => request<{ reports: ReportRecord[] }>("/api/reports"),
+  growthOverview: () => request<GrowthOverview>("/api/growth/overview"),
+  startGrowth: (goalId = "goal_clothmatics_growth_v1") => request<{ ok: true; jobId: string; message: string }>(
+    "/api/growth/start", { method: "POST", body: JSON.stringify({ goalId }) },
+  ),
+  growthAssetAction: (id: string, action: "approve" | "reject" | "mark_published", externalUrl?: string) => request<{ ok: true; asset: GrowthAsset }>(
+    `/api/growth/assets/${encodeURIComponent(id)}/action`, { method: "POST", body: JSON.stringify({ action, ...(externalUrl ? { externalUrl } : {}) }) },
+  ),
+  addGrowthMetric: (metric: { goalId: string; assetId?: string; metricDate: string; channel: string; impressions: number; views: number; clicks: number; installs: number; leads: number; revenueInr: number; notes?: string }) => request<{ ok: true; id: string }>(
+    "/api/growth/metrics", { method: "POST", body: JSON.stringify(metric) },
+  ),
+  reviewGrowth: (goalId: string) => request<{ ok: true; jobId: string; message: string }>(
+    "/api/growth/review", { method: "POST", body: JSON.stringify({ goalId }) },
+  ),
   requestResearch: (topic: string) => request<{ ok: true; jobId: string; message: string }>(
     "/api/deliverables/research",
     { method: "POST", body: JSON.stringify({ topic }) },

@@ -5,7 +5,7 @@ export async function generateDailyReport(env: Env): Promise<{ reportId: string;
   const existing = await env.DB.prepare("SELECT id FROM reports WHERE report_type = 'daily' AND period_start = ? LIMIT 1")
     .bind(today).first<{ id: string }>();
 
-  const [status, jobs, opportunities, clothmatics, experiments, learnings, decisions, deliverables] = await Promise.all([
+  const [status, jobs, opportunities, clothmatics, experiments, learnings, decisions, deliverables, growthGoal, growthAssets, growthTotals, growthReview] = await Promise.all([
     env.DB.prepare("SELECT value FROM system_settings WHERE key = 'system_status'").first<{ value: string }>(),
     env.DB.prepare(
       `SELECT status, COUNT(*) AS count FROM jobs WHERE date(updated_at) = date('now') GROUP BY status`,
@@ -29,6 +29,10 @@ export async function generateDailyReport(env: Env): Promise<{ reportId: string;
     env.DB.prepare(
       "SELECT id, deliverable_type, title, status, summary, source_count, created_at FROM deliverables ORDER BY created_at DESC LIMIT 5",
     ).all<Record<string, unknown>>(),
+    env.DB.prepare("SELECT name, objective, primary_metric, target_value, current_value, status FROM growth_goals WHERE status = 'active' LIMIT 1").first<Record<string, unknown>>(),
+    env.DB.prepare("SELECT status, COUNT(*) count FROM growth_assets GROUP BY status").all<Record<string, unknown>>(),
+    env.DB.prepare("SELECT COALESCE(SUM(impressions),0) impressions, COALESCE(SUM(clicks),0) clicks, COALESCE(SUM(installs),0) installs, COALESCE(SUM(leads),0) leads, COALESCE(SUM(revenue_inr),0) revenue_inr FROM growth_metrics").first<Record<string, unknown>>(),
+    env.DB.prepare("SELECT summary, recommendations_json, created_at FROM growth_reviews ORDER BY created_at DESC LIMIT 1").first<Record<string, unknown>>(),
   ]);
 
   const best = opportunities.results[0];
@@ -49,6 +53,7 @@ export async function generateDailyReport(env: Env): Promise<{ reportId: string;
     whatWeLearned: learnings.results,
     whatChangedInOurThinking: decisions.results,
     latestDeliverables: deliverables.results,
+    growthEngine: { goal: growthGoal ?? null, assetCounts: growthAssets.results, totals: growthTotals ?? {}, latestReview: growthReview ?? null },
     recommendedNextActions: best
       ? ["Close the highest-impact evidence gap before promotion.", "Prefer a measurable INR 0 validation experiment."]
       : ["Continue focused evidence collection; do not generate filler ideas."],

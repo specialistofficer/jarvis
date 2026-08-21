@@ -9,6 +9,7 @@ const actionTypeSchema = z.enum([
   "resume_system",
   "run_heartbeat",
   "run_scout",
+  "run_growth",
   "deep_research",
   "add_rule",
 ]);
@@ -53,6 +54,7 @@ function actionSummary(type: AssistantActionType, detail?: string): string {
     resume_system: "Resume autonomous Jarvis jobs",
     run_heartbeat: "Run one due job now",
     run_scout: "Queue a new sourced market research run",
+    run_growth: "Create a ClothMatics growth pack with posts, video script, leads and an experiment",
     deep_research: `Queue deep research${detail ? ` for ${detail}` : ""}`,
     add_rule: `Add permanent founder rule${detail ? `: ${detail}` : ""}`,
   };
@@ -72,6 +74,9 @@ function directDecision(message: string, topOpportunity?: { id: string; title: s
   }
   if (/\b(run|start|find|discover)\b.*\b(scout|opportunit)/.test(normalized)) {
     return { reply: "Main AI wardrobe market par fresh sourced research queue kar sakta hoon. Isme public links, verdict aur INR 0 validation experiment milega. Confirm karein?", action: { type: "run_scout", summary: actionSummary("run_scout") } };
+  }
+  if (/\b(create|generate|run|start|make)\b.*\b(growth|content|posts?|video|campaign)\b/.test(normalized)) {
+    return { reply: "Main ClothMatics ke liye evidence-led growth pack bana sakta hoon: social posts, YouTube Shorts script, distribution leads aur measurable experiment. Publish founder approval ke bina nahi hoga. Confirm karein?", action: { type: "run_growth", summary: actionSummary("run_growth") } };
   }
   const ruleMatch = message.match(/(?:add|save|remember)(?:\s+(?:a|this))?\s+rule\s*[:\-]?\s*(.+)/i);
   if (ruleMatch?.[1]?.trim() && ruleMatch[1].trim().length >= 5) {
@@ -93,6 +98,10 @@ function isStatusQuestion(message: string): boolean {
 
 function isDeliverableQuestion(message: string): boolean {
   return /\b(report|research|finding|findings|result|deliverable|source|evidence|kya mila|kya banaya|produce|created)\b/i.test(message);
+}
+
+function isGrowthQuestion(message: string): boolean {
+  return /\b(growth|content|post|video|lead|campaign|install|revenue|performance)\b/i.test(message);
 }
 
 function statusReply(context: {
@@ -153,7 +162,7 @@ export async function pendingAssistantProposal(env: Env): Promise<AssistantPropo
 
 export async function chatWithAssistant(env: Env, message: string): Promise<{ reply: string; proposal: AssistantProposal | null }> {
   await storeMessage(env.DB, "user", message);
-  const [today, jobs, opportunities, rules, history, deliverables, latestReport] = await Promise.all([
+  const [today, jobs, opportunities, rules, history, deliverables, latestReport, growthGoal, growthAssets, growthTotals] = await Promise.all([
     getTodaySummary(env.DB),
     env.DB.prepare(
       "SELECT type, status, scheduled_at FROM jobs WHERE status IN ('queued', 'running', 'deferred') ORDER BY scheduled_at ASC LIMIT 8",
@@ -163,6 +172,9 @@ export async function chatWithAssistant(env: Env, message: string): Promise<{ re
     assistantHistory(env),
     env.DB.prepare("SELECT id, title, status, summary, source_count, content_json, created_at FROM deliverables ORDER BY created_at DESC LIMIT 3").all<Record<string, unknown>>(),
     env.DB.prepare("SELECT summary, content_json, created_at FROM reports ORDER BY created_at DESC LIMIT 1").first<Record<string, unknown>>(),
+    env.DB.prepare("SELECT id, name, objective, primary_metric, target_value, current_value, status FROM growth_goals WHERE status = 'active' LIMIT 1").first<Record<string, unknown>>(),
+    env.DB.prepare("SELECT status, COUNT(*) count FROM growth_assets GROUP BY status").all<Record<string, unknown>>(),
+    env.DB.prepare("SELECT COALESCE(SUM(clicks),0) clicks, COALESCE(SUM(installs),0) installs, COALESCE(SUM(leads),0) leads, COALESCE(SUM(revenue_inr),0) revenue_inr FROM growth_metrics").first<Record<string, unknown>>(),
   ]);
   const activeJobs = jobs.results;
   const queued = activeJobs.filter((job) => job.status === "queued" || job.status === "deferred").length;
@@ -177,9 +189,18 @@ export async function chatWithAssistant(env: Env, message: string): Promise<{ re
     paidSpendAllowed: false,
     latestDeliverables: deliverables.results,
     latestReport: latestReport ?? null,
+    growth: { goal: growthGoal ?? null, assetCounts: growthAssets.results, totals: growthTotals ?? {} },
   };
 
   let decision = directDecision(message, today.topOpportunity ? { id: today.topOpportunity.id, title: today.topOpportunity.title } : null);
+  if (!decision && isGrowthQuestion(message)) {
+    const totalAssets = growthAssets.results.reduce((sum, item) => sum + Number(item.count ?? 0), 0);
+    const ready = growthAssets.results.find((item) => item.status === "ready_to_publish");
+    decision = growthGoal ? {
+      reply: `Active growth goal “${String(growthGoal.name)}” hai. ${totalAssets} content assets created hain; ${Number(ready?.count ?? 0)} ready to publish. Recorded outcome: ${Number(growthTotals?.clicks ?? 0)} clicks, ${Number(growthTotals?.installs ?? 0)} installs, ${Number(growthTotals?.leads ?? 0)} leads aur ₹${Number(growthTotals?.revenue_inr ?? 0)} revenue. Growth page par drafts approve, copy/publish aur metrics record kar sakte hain.`,
+      action: null,
+    } : { reply: "Growth Engine abhi initialize nahi hua. Founder confirmation ke baad ClothMatics growth pack create kiya ja sakta hai.", action: null };
+  }
   if (!decision && isDeliverableQuestion(message)) {
     const latest = deliverables.results[0];
     decision = latest ? {
@@ -286,6 +307,11 @@ export async function confirmAssistantAction(env: Env, id: string): Promise<{ me
         queries: ["AI wardrobe app", "digital closet app", "wardrobe organizer"],
       }, 95);
       message = `Confirmed. Sourced research queue ho gaya (${jobId.slice(0, 8)}). Result Deliverables page par citations ke saath dikhega.`;
+    } else if (action.action_type === "run_growth") {
+      const goal = await env.DB.prepare("SELECT id FROM growth_goals WHERE status = 'active' ORDER BY created_at ASC LIMIT 1").first<{ id: string }>();
+      if (!goal) throw new Error("No active growth goal exists");
+      const jobId = await enqueueJob(env.DB, "growth_plan", { goalId: goal.id, reason: "founder_assistant" }, 100);
+      message = `Confirmed. Growth Factory queue ho gaya (${jobId.slice(0, 8)}). Posts, video script, leads aur experiment Growth page par founder review ke liye aayenge.`;
     } else if (action.action_type === "deep_research") {
       const opportunityId = String(payload.opportunityId ?? "");
       if (!opportunityId) throw new Error("Deep research opportunity is missing");

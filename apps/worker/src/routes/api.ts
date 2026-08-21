@@ -27,6 +27,29 @@ const researchRequestSchema = z.object({
   queries: z.array(z.string().trim().min(3).max(100)).max(5).optional(),
 });
 
+const growthStartSchema = z.object({
+  goalId: z.string().trim().min(1).default("goal_clothmatics_growth_v1"),
+});
+
+const growthAssetActionSchema = z.object({
+  action: z.enum(["approve", "reject", "mark_published"]),
+  externalUrl: z.string().url().max(1000).optional(),
+});
+
+const growthMetricSchema = z.object({
+  goalId: z.string().trim().min(1),
+  assetId: z.string().trim().min(1).optional(),
+  metricDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  channel: z.string().trim().min(2).max(80),
+  impressions: z.number().int().nonnegative().default(0),
+  views: z.number().int().nonnegative().default(0),
+  clicks: z.number().int().nonnegative().default(0),
+  installs: z.number().int().nonnegative().default(0),
+  leads: z.number().int().nonnegative().default(0),
+  revenueInr: z.number().nonnegative().default(0),
+  notes: z.string().trim().max(1000).optional(),
+});
+
 function json(data: unknown, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json; charset=utf-8");
@@ -187,6 +210,8 @@ export async function handleApi(request: Request, env: Env): Promise<Response> {
           { type: "learning_review", name: "Learning Engine", cadence: "Every 24 hours after completion", purpose: "Compare completed experiment predictions with actual results and store reusable lessons." },
           { type: "daily_report", name: "Daily Founder Brief", cadence: "Every 24 hours after completion", purpose: "Refresh the concise executive report without using AI allowance." },
           { type: "research_opportunity", name: "Strategist Decision", cadence: "After a sourced brief is completed", purpose: "Turn cited research into a candidate, more-research, or reject decision." },
+          { type: "growth_plan", name: "Growth Factory", cadence: "On founder request or a new campaign", purpose: "Create posts, a short-video script, distribution leads and a measurable experiment from evidence." },
+          { type: "growth_review", name: "Growth Review", cadence: "Every 24 hours", purpose: "Compare asset metrics, identify winners or failures, and update the growth goal." },
         ],
         settings: settings.results,
         jobCounts: jobCounts.results,
@@ -214,6 +239,63 @@ export async function handleApi(request: Request, env: Env): Promise<Response> {
       }
       const jobId = await enqueueJob(env.DB, "research_brief", input, 95);
       return json({ ok: true, jobId, message: "Sourced research queued. Jarvis will collect evidence before writing a verdict." }, { status: 201 });
+    }
+    if (request.method === "GET" && path === "/api/growth/overview") {
+      const [goal, assets, leads, metrics, reviews, experiments, totals] = await Promise.all([
+        env.DB.prepare("SELECT * FROM growth_goals WHERE status = 'active' ORDER BY created_at ASC LIMIT 1").first<Record<string, unknown>>(),
+        env.DB.prepare("SELECT * FROM growth_assets ORDER BY created_at DESC LIMIT 60").all<Record<string, unknown>>(),
+        env.DB.prepare("SELECT * FROM growth_leads ORDER BY created_at DESC LIMIT 40").all<Record<string, unknown>>(),
+        env.DB.prepare("SELECT * FROM growth_metrics ORDER BY metric_date DESC, created_at DESC LIMIT 100").all<Record<string, unknown>>(),
+        env.DB.prepare("SELECT * FROM growth_reviews ORDER BY created_at DESC LIMIT 12").all<Record<string, unknown>>(),
+        env.DB.prepare(`SELECT e.*, p.name AS project_name FROM experiments e JOIN projects p ON p.id = e.project_id
+          WHERE p.objective LIKE 'Growth goal %' ORDER BY COALESCE(e.started_at, e.completed_at) DESC LIMIT 10`).all<Record<string, unknown>>(),
+        env.DB.prepare(`SELECT COALESCE(SUM(impressions),0) impressions, COALESCE(SUM(views),0) views,
+          COALESCE(SUM(clicks),0) clicks, COALESCE(SUM(installs),0) installs,
+          COALESCE(SUM(leads),0) leads, COALESCE(SUM(revenue_inr),0) revenue_inr FROM growth_metrics`).first<Record<string, unknown>>(),
+      ]);
+      return json({ goal: goal ?? null, assets: assets.results, leads: leads.results, metrics: metrics.results, reviews: reviews.results, experiments: experiments.results, totals: totals ?? {} });
+    }
+    if (request.method === "POST" && path === "/api/growth/start") {
+      const input = growthStartSchema.parse(await parseBody(request));
+      const goal = await env.DB.prepare("SELECT id FROM growth_goals WHERE id = ? AND status = 'active'").bind(input.goalId).first<{ id: string }>();
+      if (!goal) return json({ error: "Active growth goal not found" }, { status: 404 });
+      const jobId = await enqueueJob(env.DB, "growth_plan", { goalId: goal.id, reason: "founder_growth_hq" }, 100);
+      return json({ ok: true, jobId, message: "Growth Factory queued: posts, video script, leads and experiment will be created for founder review." }, { status: 201 });
+    }
+    const growthAssetMatch = path.match(/^\/api\/growth\/assets\/([^/]+)\/action$/);
+    if (request.method === "POST" && growthAssetMatch?.[1]) {
+      const id = decodeURIComponent(growthAssetMatch[1]);
+      const input = growthAssetActionSchema.parse(await parseBody(request));
+      const status = input.action === "approve" ? "ready_to_publish" : input.action === "reject" ? "rejected" : "published";
+      const result = await env.DB.prepare(
+        `UPDATE growth_assets SET status = ?, external_url = COALESCE(?, external_url),
+          published_at = CASE WHEN ? = 'published' THEN datetime('now') ELSE published_at END, updated_at = datetime('now')
+         WHERE id = ? RETURNING id, title, status`,
+      ).bind(status, input.externalUrl ?? null, status, id).first<Record<string, unknown>>();
+      if (!result) return json({ error: "Growth asset not found" }, { status: 404 });
+      await env.DB.prepare(`INSERT INTO decisions (id, decision_type, subject_type, subject_id, reasoning_summary, decision, confidence)
+        VALUES (?, 'growth_asset_action', 'growth_asset', ?, ?, ?, 100)`)
+        .bind(crypto.randomUUID(), id, `Founder selected ${input.action}.`, input.action).run();
+      return json({ ok: true, asset: result });
+    }
+    if (request.method === "POST" && path === "/api/growth/metrics") {
+      const input = growthMetricSchema.parse(await parseBody(request));
+      const goal = await env.DB.prepare("SELECT id FROM growth_goals WHERE id = ?").bind(input.goalId).first();
+      if (!goal) return json({ error: "Growth goal not found" }, { status: 404 });
+      if (input.assetId) {
+        const asset = await env.DB.prepare("SELECT id FROM growth_assets WHERE id = ? AND goal_id = ?").bind(input.assetId, input.goalId).first();
+        if (!asset) return json({ error: "Asset does not belong to this growth goal" }, { status: 400 });
+      }
+      const id = crypto.randomUUID();
+      await env.DB.prepare(`INSERT INTO growth_metrics (id, goal_id, asset_id, metric_date, channel, impressions, views, clicks, installs, leads, revenue_inr, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(id, input.goalId, input.assetId ?? null, input.metricDate, input.channel, input.impressions, input.views, input.clicks, input.installs, input.leads, input.revenueInr, input.notes ?? null).run();
+      return json({ ok: true, id }, { status: 201 });
+    }
+    if (request.method === "POST" && path === "/api/growth/review") {
+      const input = growthStartSchema.parse(await parseBody(request));
+      const jobId = await enqueueJob(env.DB, "growth_review", { goalId: input.goalId, reason: "founder_growth_review" }, 95);
+      return json({ ok: true, jobId, message: "Growth performance review queued." }, { status: 201 });
     }
 
     const actionMatch = path.match(/^\/api\/opportunities\/([^/]+)\/action$/);

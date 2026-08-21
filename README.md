@@ -1,6 +1,6 @@
 # Jarvis
 
-Jarvis is a zero-spend autonomous venture and growth operating system. This repository contains the first working vertical slice: a scheduled Cloudflare Worker, persistent D1 memory, an NVIDIA-compatible Scout, deterministic opportunity scoring, and a mobile-first Founder HQ.
+Jarvis is a zero-spend venture and growth operating system. The first complete operating loop is the ClothMatics Growth Engine: research evidence becomes founder-review content assets and distribution targets, approved assets are published manually, measured outcomes are recorded, and daily reviews decide what to repeat or stop.
 
 Jarvis now presents the operating system through a private text/voice founder assistant. The assistant explains live state and can propose a limited set of actions, but every mutation requires explicit founder confirmation. Opportunities remain in `researching` when credible linked evidence is missing.
 
@@ -27,6 +27,14 @@ Live Founder HQ: https://jarvis-founder-hq.pages.dev
 - Persistent assistant conversation and confirmation-gated action proposals
 - Single-founder email/password login with rate limiting and signed sessions
 - Production authentication fails closed when founder secrets are missing
+- ClothMatics growth goal with target, deadline and live outcome scoreboard
+- Growth Factory output: Instagram and LinkedIn posts, X thread, YouTube Shorts script/storyboard, SEO brief and sourced distribution leads
+- Founder approval workflow from draft to ready-to-publish to published
+- Per-asset impressions, views, clicks, installs, leads and INR revenue capture
+- Daily performance review that refuses to claim a winner without measurement data
+- Evidence-safe content fallback when the AI provider returns malformed output
+
+Automatic social publishing is not enabled yet because no official platform credentials are configured. Jarvis creates reviewable assets and tracks outcomes; the founder controls external publication until an approved connector is added.
 
 The local mock Scout is a pipeline fixture, not market evidence. Its output is deliberately low-confidence and remains `researching`.
 

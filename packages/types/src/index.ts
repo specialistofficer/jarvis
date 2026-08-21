@@ -120,11 +120,47 @@ export const researchBriefSchema = z.object({
   }),
 });
 
+export const growthAssetTypes = [
+  "instagram_post", "linkedin_post", "x_thread", "youtube_short_script", "blog_brief", "lead_magnet",
+] as const;
+
+export const growthPackSchema = z.object({
+  strategySummary: z.string().min(60).max(1200),
+  targetAudience: z.string().min(20).max(500),
+  messagingAngle: z.string().min(20).max(500),
+  contentPillars: z.array(z.string().min(10).max(220)).min(3).max(5),
+  assets: z.array(z.object({
+    assetType: z.enum(growthAssetTypes),
+    channel: z.string().min(1).max(80),
+    title: z.string().min(5).max(180),
+    hook: z.string().min(10).max(400),
+    body: z.string().min(40).max(3500),
+    cta: z.string().min(8).max(400),
+    productionNotes: z.string().min(15).max(1000),
+    sourceUrls: z.array(z.string().url()).max(4),
+  })).min(4).max(6),
+  distributionLeads: z.array(z.object({
+    leadType: z.enum(["community", "creator", "partner", "publication", "customer_signal"]),
+    name: z.string().min(3).max(180),
+    sourceUrl: z.string().url().nullable(),
+    whyRelevant: z.string().min(20).max(600),
+    nextAction: z.string().min(15).max(500),
+  })).min(2).max(6),
+  experiment: z.object({
+    hypothesis: z.string().min(20).max(600),
+    method: z.string().min(20).max(1000),
+    successMetric: z.string().min(10).max(500),
+    killCondition: z.string().min(10).max(500),
+  }),
+  evidenceLimits: z.array(z.string().min(10).max(400)).min(1).max(5),
+});
+
 export type ScoutOpportunity = z.infer<typeof scoutOpportunitySchema>;
 export type ScoutOutput = z.infer<typeof scoutOutputSchema>;
 export type StrategistOutput = z.infer<typeof strategistOutputSchema>;
 export type LearningOutput = z.infer<typeof learningOutputSchema>;
 export type ResearchBrief = z.infer<typeof researchBriefSchema>;
+export type GrowthPack = z.infer<typeof growthPackSchema>;
 
 export const opportunityActionSchema = z.object({
   action: z.enum(["promote", "reject", "deep_research", "duplicate"]),

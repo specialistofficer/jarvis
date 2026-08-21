@@ -5,6 +5,7 @@ import { runStrategistJob } from "./strategist";
 import { runLearningReview } from "./learning";
 import { generateDailyReport } from "./report";
 import { runResearchBrief } from "./research";
+import { runGrowthPlan, runGrowthReview } from "./growth";
 
 interface JobRow {
   id: string;
@@ -22,10 +23,11 @@ export async function enqueueJob(
   scheduledAt = new Date(),
 ): Promise<string> {
   const id = crypto.randomUUID();
+  const scheduledSql = scheduledAt.toISOString().replace("T", " ").slice(0, 19);
   await db.prepare(
     `INSERT INTO jobs (id, type, priority, payload, status, scheduled_at, max_attempts)
      VALUES (?, ?, ?, ?, 'queued', ?, 3)`,
-  ).bind(id, type, priority, JSON.stringify(payload), scheduledAt.toISOString()).run();
+  ).bind(id, type, priority, JSON.stringify(payload), scheduledSql).run();
   return id;
 }
 
@@ -76,6 +78,12 @@ async function executeAcquiredJob(env: Env, job: JobRow): Promise<void> {
       resultSummary = result.created
         ? "Created today's founder brief from current jobs, opportunities, experiments, learnings and decisions."
         : "Refreshed today's founder brief with the latest operating data.";
+    } else if (job.type === "growth_plan") {
+      const result = await runGrowthPlan(env, job.id, payload);
+      resultSummary = `Created ${result.assetCount} founder-review content assets and ${result.leadCount} distribution leads for the active ClothMatics growth goal${result.fallback ? " using the evidence-safe fallback" : ""}.`;
+    } else if (job.type === "growth_review") {
+      const result = await runGrowthReview(env, payload);
+      resultSummary = result.summary;
     }
     else throw new Error(`Unknown job type: ${job.type}`);
 
@@ -111,6 +119,7 @@ async function scheduleNextRecurringJob(db: D1Database, completedType: string, c
     research_brief: { priority: 70, reason: "daily_sourced_research" },
     learning_review: { priority: 55, reason: "daily_learning_review" },
     daily_report: { priority: 45, reason: "daily_report" },
+    growth_review: { priority: 65, reason: "daily_growth_review" },
   };
   const config = recurring[completedType];
   if (!config) return;
@@ -122,7 +131,7 @@ async function scheduleNextRecurringJob(db: D1Database, completedType: string, c
      )`,
   ).bind(
     crypto.randomUUID(), completedType, config.priority,
-    JSON.stringify(completedType === "research_brief" ? { ...originalPayload, reason: config.reason } : { reason: config.reason }),
+    JSON.stringify(["research_brief", "growth_review"].includes(completedType) ? { ...originalPayload, reason: config.reason } : { reason: config.reason }),
     completedType, completedId,
   ).run();
 }
