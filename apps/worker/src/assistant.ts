@@ -402,7 +402,7 @@ If no action is needed, simply omit the JSON block entirely. Do not invent tools
             const assetId = crypto.randomUUID();
             statements.push(env.DB.prepare(
               `INSERT INTO growth_assets (id, goal_id, job_id, asset_type, channel, title, hook, body, cta, production_notes, status)
-               VALUES (?, 'goal_agency_v1', 'jarvis_assistant', 'image', 'Website', ?, ?, ?, ?, ?, 'draft')`
+               VALUES (?, 'goal_agency_v1', NULL, 'image', 'Website', ?, ?, ?, ?, ?, 'draft')`
             ).bind(assetId, `AI Generated Image`, `Requested by founder`, `Prompt: ${tool.arguments.prompt}`, ``, `Asset created by Jarvis`));
             
             statements.push(env.DB.prepare(
@@ -425,8 +425,13 @@ If no action is needed, simply omit the JSON block entirely. Do not invent tools
       }
       
       if (statements.length > 0) {
-         await env.DB.batch(statements);
-         replyText += `\n\n[System: Executed ${statements.length} internal tasks]`;
+         try {
+           await env.DB.batch(statements);
+           replyText += `\n\n[System: Executed ${statements.length} internal tasks]`;
+         } catch (e: any) {
+           console.error("Failed to execute DB batch:", e);
+           replyText += `\n\n[System Error: Task Execution Failed - ${e.message}]`;
+         }
       }
 
       decision = { reply: replyText.slice(0, 1800), action: null };
