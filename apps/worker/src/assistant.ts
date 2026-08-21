@@ -52,7 +52,7 @@ function actionSummary(type: AssistantActionType, detail?: string): string {
     pause_system: "Pause all autonomous Jarvis jobs",
     resume_system: "Resume autonomous Jarvis jobs",
     run_heartbeat: "Run one due job now",
-    run_scout: "Queue a new Opportunity Scout run",
+    run_scout: "Queue a new sourced market research run",
     deep_research: `Queue deep research${detail ? ` for ${detail}` : ""}`,
     add_rule: `Add permanent founder rule${detail ? `: ${detail}` : ""}`,
   };
@@ -71,7 +71,7 @@ function directDecision(message: string, topOpportunity?: { id: string; title: s
     return { reply: "Main abhi queue check karke ek due job run kar sakta hoon. Confirm karein?", action: { type: "run_heartbeat", summary: actionSummary("run_heartbeat") } };
   }
   if (/\b(run|start|find|discover)\b.*\b(scout|opportunit)/.test(normalized)) {
-    return { reply: "Main ek fresh Opportunity Scout run queue kar sakta hoon. Confirm karein?", action: { type: "run_scout", summary: actionSummary("run_scout") } };
+    return { reply: "Main AI wardrobe market par fresh sourced research queue kar sakta hoon. Isme public links, verdict aur INR 0 validation experiment milega. Confirm karein?", action: { type: "run_scout", summary: actionSummary("run_scout") } };
   }
   const ruleMatch = message.match(/(?:add|save|remember)(?:\s+(?:a|this))?\s+rule\s*[:\-]?\s*(.+)/i);
   if (ruleMatch?.[1]?.trim() && ruleMatch[1].trim().length >= 5) {
@@ -89,6 +89,10 @@ function directDecision(message: string, topOpportunity?: { id: string; title: s
 
 function isStatusQuestion(message: string): boolean {
   return /\b(status|update|brief|briefing|happening|scheduled|schedule|next job|kya ho|kya chal|what.*doing)\b/i.test(message);
+}
+
+function isDeliverableQuestion(message: string): boolean {
+  return /\b(report|research|finding|findings|result|deliverable|source|evidence|kya mila|kya banaya|produce|created)\b/i.test(message);
 }
 
 function statusReply(context: {
@@ -116,10 +120,12 @@ async function createProposal(env: Env, action: NonNullable<AssistantDecision["a
   }
   if (action.type === "deep_research") {
     if (!action.opportunityId) return null;
-    const opportunity = await env.DB.prepare("SELECT id FROM opportunities WHERE id = ? AND status NOT IN ('rejected', 'archived')")
-      .bind(action.opportunityId).first<{ id: string }>();
+    const opportunity = await env.DB.prepare("SELECT id, title, summary FROM opportunities WHERE id = ? AND status NOT IN ('rejected', 'archived')")
+      .bind(action.opportunityId).first<{ id: string; title: string; summary: string }>();
     if (!opportunity) return null;
     payload.opportunityId = opportunity.id;
+    payload.topic = `${opportunity.title}: ${opportunity.summary}`;
+    payload.queries = [opportunity.title, "digital closet app", "wardrobe organizer"];
   }
   const id = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString().replace("T", " ").slice(0, 19);
@@ -147,7 +153,7 @@ export async function pendingAssistantProposal(env: Env): Promise<AssistantPropo
 
 export async function chatWithAssistant(env: Env, message: string): Promise<{ reply: string; proposal: AssistantProposal | null }> {
   await storeMessage(env.DB, "user", message);
-  const [today, jobs, opportunities, rules, history] = await Promise.all([
+  const [today, jobs, opportunities, rules, history, deliverables, latestReport] = await Promise.all([
     getTodaySummary(env.DB),
     env.DB.prepare(
       "SELECT type, status, scheduled_at FROM jobs WHERE status IN ('queued', 'running', 'deferred') ORDER BY scheduled_at ASC LIMIT 8",
@@ -155,6 +161,8 @@ export async function chatWithAssistant(env: Env, message: string): Promise<{ re
     listOpportunities(env.DB, 8),
     listActiveFounderRules(env.DB),
     assistantHistory(env),
+    env.DB.prepare("SELECT id, title, status, summary, source_count, content_json, created_at FROM deliverables ORDER BY created_at DESC LIMIT 3").all<Record<string, unknown>>(),
+    env.DB.prepare("SELECT summary, content_json, created_at FROM reports ORDER BY created_at DESC LIMIT 1").first<Record<string, unknown>>(),
   ]);
   const activeJobs = jobs.results;
   const queued = activeJobs.filter((job) => job.status === "queued" || job.status === "deferred").length;
@@ -167,9 +175,21 @@ export async function chatWithAssistant(env: Env, message: string): Promise<{ re
     opportunities: opportunities.map((item) => ({ id: item.id, title: item.title, status: item.status, score: item.overallScore, confidence: item.confidenceScore })),
     founderRules: rules,
     paidSpendAllowed: false,
+    latestDeliverables: deliverables.results,
+    latestReport: latestReport ?? null,
   };
 
   let decision = directDecision(message, today.topOpportunity ? { id: today.topOpportunity.id, title: today.topOpportunity.title } : null);
+  if (!decision && isDeliverableQuestion(message)) {
+    const latest = deliverables.results[0];
+    decision = latest ? {
+      reply: `Latest deliverable “${String(latest.title)}” hai. Isme ${Number(latest.source_count ?? 0)} public sources hain. Status: ${String(latest.status)}. Result: ${String(latest.summary)} Deliverables page par findings, citations, competitors, experiment aur founder decision detail mein available hain.`,
+      action: null,
+    } : {
+      reply: "Abhi tak koi genuine research deliverable nahi bana. Main activity ko result nahi bolunga. Aap ‘run sourced research’ bolkar first evidence-backed brief queue kar sakte hain.",
+      action: null,
+    };
+  }
   if (!decision && isStatusQuestion(message)) {
     decision = {
       reply: statusReply({
@@ -260,18 +280,22 @@ export async function confirmAssistantAction(env: Env, id: string): Promise<{ me
       const result = await runHeartbeat(env);
       message = result.processed ? "Confirmed. Ek due job process ho gayi." : "Confirmed. Queue check complete; abhi koi due job nahi thi.";
     } else if (action.action_type === "run_scout") {
-      const jobId = await enqueueJob(env.DB, "scout", { reason: "founder_assistant" }, 100);
-      message = `Confirmed. Opportunity Scout queue ho gaya (${jobId.slice(0, 8)}). Next heartbeat ise process karega.`;
+      const jobId = await enqueueJob(env.DB, "research_brief", {
+        reason: "founder_assistant",
+        topic: "AI wardrobe and digital closet apps: user problems, competitors, monetization and zero-cost validation",
+        queries: ["AI wardrobe app", "digital closet app", "wardrobe organizer"],
+      }, 95);
+      message = `Confirmed. Sourced research queue ho gaya (${jobId.slice(0, 8)}). Result Deliverables page par citations ke saath dikhega.`;
     } else if (action.action_type === "deep_research") {
       const opportunityId = String(payload.opportunityId ?? "");
       if (!opportunityId) throw new Error("Deep research opportunity is missing");
       await env.DB.batch([
         env.DB.prepare("UPDATE opportunities SET status = 'researching', updated_at = datetime('now') WHERE id = ?").bind(opportunityId),
         env.DB.prepare(
-          "INSERT INTO jobs (id, type, priority, payload, status, scheduled_at, max_attempts) VALUES (?, 'research_opportunity', 85, ?, 'queued', datetime('now'), 3)",
-        ).bind(crypto.randomUUID(), JSON.stringify({ opportunityId })),
+          "INSERT INTO jobs (id, type, priority, payload, status, scheduled_at, max_attempts) VALUES (?, 'research_brief', 95, ?, 'queued', datetime('now'), 3)",
+        ).bind(crypto.randomUUID(), JSON.stringify(payload)),
       ]);
-      message = "Confirmed. Strategist deep research queue ho gaya; result Opportunities aur Activity mein dikhega.";
+      message = "Confirmed. Sourced deep research queue ho gaya; result Deliverables page par citations ke saath dikhega.";
     } else {
       const rule = String(payload.rule ?? "").trim();
       if (rule.length < 5) throw new Error("Founder rule is missing");

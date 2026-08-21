@@ -12,10 +12,14 @@ export async function runStrategistJob(env: Env, jobId: string, payload: Record<
     .bind(opportunityId).first<Record<string, unknown>>();
   if (!opportunity) throw new Error("Opportunity no longer exists");
 
-  const [rules, learningRows] = await Promise.all([
+  const deliverableId = typeof payload.deliverableId === "string" ? payload.deliverableId : null;
+  const [rules, learningRows, research] = await Promise.all([
     listActiveFounderRules(env.DB),
     env.DB.prepare("SELECT title, lesson, confidence, applies_to FROM learnings WHERE active = 1 ORDER BY confidence DESC, created_at DESC LIMIT 12")
       .all<Record<string, unknown>>(),
+    deliverableId
+      ? env.DB.prepare("SELECT title, summary, content_json, source_count FROM deliverables WHERE id = ?").bind(deliverableId).first<Record<string, unknown>>()
+      : env.DB.prepare("SELECT title, summary, content_json, source_count FROM deliverables WHERE related_opportunity_id = ? ORDER BY created_at DESC LIMIT 1").bind(opportunityId).first<Record<string, unknown>>(),
   ]);
   const provider = selectAIProvider(env);
   const runId = crypto.randomUUID();
@@ -30,7 +34,7 @@ export async function runStrategistJob(env: Env, jobId: string, payload: Record<
   try {
     const generated = await provider.generateStructured({
       system: STRATEGIST_SYSTEM_PROMPT,
-      prompt: buildStrategistPrompt(opportunity, rules, learningRows.results),
+      prompt: buildStrategistPrompt(opportunity, rules, learningRows.results, research ?? null),
       schema: strategistOutputSchema,
       temperature: 0.1,
     });

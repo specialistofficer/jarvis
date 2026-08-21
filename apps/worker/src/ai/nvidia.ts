@@ -71,7 +71,7 @@ export class NvidiaProvider implements AIProvider {
           { role: "user", content: request.prompt },
         ],
         temperature: request.temperature ?? 0.2,
-        max_tokens: 1800,
+        max_tokens: request.maxTokens ?? 1800,
         stream: false,
       }),
     });

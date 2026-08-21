@@ -51,6 +51,22 @@ const MOCK_LEARNING_OUTPUT = {
   appliesTo: "all ventures",
 };
 
+const MOCK_RESEARCH_OUTPUT = {
+  title: "Evidence-backed digital closet opportunity review",
+  executiveSummary: "Public discussions show recurring interest in wardrobe organization, but this development fixture cannot establish representative demand. Validate the narrowest workflow with real target users before building.",
+  verdict: "validate_more",
+  confidence: 30,
+  findings: [
+    { finding: "Users publicly discuss digital wardrobe organization workflows, but the sample is small and self-selected.", evidenceUrls: ["https://example.com/source-1"], confidence: 30, implication: "Treat this as discovery input, not validated demand." },
+    { finding: "Existing tools indicate alternatives already exist, so differentiation needs direct user testing.", evidenceUrls: ["https://example.com/source-2"], confidence: 25, implication: "Test a specific underserved workflow rather than a general closet app." },
+  ],
+  alternatives: [{ name: "Example alternative", url: "https://example.com/source-2", positioning: "A public placeholder alternative used only for deterministic development testing.", gap: "No market gap is validated by this fixture." }],
+  opportunity: { exactProblem: "Target users may struggle to decide what to wear or buy from an existing wardrobe.", targetUser: "People actively organizing a digital wardrobe", differentiation: "Focus on one measurable decision workflow instead of generic recommendations.", monetization: "Do not monetize before behavior is validated.", biggestRisk: "Public discussions may not translate into repeat usage." },
+  validationExperiment: { hypothesis: "Target users will complete and repeat a narrow wardrobe-planning workflow.", method: "Run a manual concierge test with opted-in target users at zero cost.", successMetric: "At least 3 of 10 testers repeat the workflow within seven days.", killCondition: "Stop if fewer than 2 of 10 testers repeat it.", steps: ["Recruit ten target users", "Deliver the workflow manually", "Measure seven-day repeat behavior"] },
+  evidenceLimits: ["This is a deterministic development fixture, not market research."],
+  founderDecision: { question: "Should Jarvis run the zero-cost validation experiment?", options: ["Run the experiment", "Collect stronger evidence first"] },
+};
+
 export class DevelopmentMockProvider implements AIProvider {
   readonly name = "development-mock";
 
@@ -59,7 +75,7 @@ export class DevelopmentMockProvider implements AIProvider {
   }
 
   async generateStructured<T>(request: GenerateRequest<T>): Promise<GenerationResult<T>> {
-    const candidates = [MOCK_SCOUT_OUTPUT, MOCK_STRATEGIST_OUTPUT, MOCK_LEARNING_OUTPUT];
+    const candidates = [MOCK_SCOUT_OUTPUT, MOCK_STRATEGIST_OUTPUT, MOCK_LEARNING_OUTPUT, MOCK_RESEARCH_OUTPUT];
     const parsed = candidates.map((candidate) => request.schema.safeParse(candidate)).find((result) => result.success);
     if (!parsed?.success) throw new Error("Development mock has no fixture for the requested schema");
     return {

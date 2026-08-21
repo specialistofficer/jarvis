@@ -21,6 +21,12 @@ const assistantChatSchema = z.object({
   message: z.string().trim().min(1).max(2000),
 });
 
+const researchRequestSchema = z.object({
+  topic: z.string().trim().min(10).max(300),
+  opportunityId: z.string().trim().min(1).optional(),
+  queries: z.array(z.string().trim().min(3).max(100)).max(5).optional(),
+});
+
 function json(data: unknown, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json; charset=utf-8");
@@ -72,8 +78,12 @@ async function handleOpportunityAction(env: Env, id: string, request: Request): 
   if (input.action === "deep_research") {
     statements.push(env.DB.prepare(
       `INSERT INTO jobs (id, type, priority, payload, status, scheduled_at, max_attempts)
-       VALUES (?, 'research_opportunity', 85, ?, 'queued', datetime('now'), 3)`,
-    ).bind(crypto.randomUUID(), JSON.stringify({ opportunityId: id })));
+       VALUES (?, 'research_brief', 95, ?, 'queued', datetime('now'), 3)`,
+    ).bind(crypto.randomUUID(), JSON.stringify({
+      opportunityId: id,
+      topic: `${existing.title}: ${existing.summary}`,
+      queries: [existing.title, "digital closet app", "wardrobe organizer"],
+    })));
   }
 
   await env.DB.batch(statements);
@@ -141,7 +151,7 @@ export async function handleApi(request: Request, env: Env): Promise<Response> {
         : await cancelAssistantAction(env, id));
     }
     if (request.method === "GET" && path === "/api/system/overview") {
-      const [settings, jobCounts, jobs, agentRuns, opportunityCounts, latestReport] = await Promise.all([
+      const [settings, jobCounts, jobs, agentRuns, opportunityCounts, latestReport, latestDeliverables] = await Promise.all([
         env.DB.prepare("SELECT key, value, updated_at FROM system_settings ORDER BY key").all<Record<string, unknown>>(),
         env.DB.prepare("SELECT status, COUNT(*) AS count FROM jobs GROUP BY status").all<Record<string, unknown>>(),
         env.DB.prepare(
@@ -157,6 +167,8 @@ export async function handleApi(request: Request, env: Env): Promise<Response> {
         env.DB.prepare("SELECT status, COUNT(*) AS count FROM opportunities GROUP BY status").all<Record<string, unknown>>(),
         env.DB.prepare("SELECT report_type, period_start, summary, created_at FROM reports ORDER BY created_at DESC LIMIT 1")
           .first<Record<string, unknown>>(),
+        env.DB.prepare("SELECT id, deliverable_type, title, status, summary, source_count, created_at FROM deliverables ORDER BY created_at DESC LIMIT 5")
+          .all<Record<string, unknown>>(),
       ]);
       const nextHeartbeat = new Date();
       nextHeartbeat.setUTCMinutes(0, 0, 0);
@@ -171,10 +183,10 @@ export async function handleApi(request: Request, env: Env): Promise<Response> {
           behavior: "Checks the persistent queue and processes at most one due job.",
         },
         recurringWork: [
-          { type: "scout", name: "Opportunity Scout", cadence: "Every 24 hours after completion", purpose: "Find one evidence-seeking opportunity and store it after validation." },
+          { type: "research_brief", name: "Sourced Market Research", cadence: "Every 24 hours after completion", purpose: "Collect public sources and produce a cited research brief with a verdict and validation experiment." },
           { type: "learning_review", name: "Learning Engine", cadence: "Every 24 hours after completion", purpose: "Compare completed experiment predictions with actual results and store reusable lessons." },
           { type: "daily_report", name: "Daily Founder Brief", cadence: "Every 24 hours after completion", purpose: "Refresh the concise executive report without using AI allowance." },
-          { type: "research_opportunity", name: "Strategist / Deep Research", cadence: "Only when you request Deep Research", purpose: "Evaluate one selected opportunity using rules, evidence and prior learnings." },
+          { type: "research_opportunity", name: "Strategist Decision", cadence: "After a sourced brief is completed", purpose: "Turn cited research into a candidate, more-research, or reject decision." },
         ],
         settings: settings.results,
         jobCounts: jobCounts.results,
@@ -182,12 +194,26 @@ export async function handleApi(request: Request, env: Env): Promise<Response> {
         recentAgentRuns: agentRuns.results,
         opportunityCounts: opportunityCounts.results,
         latestReport: latestReport ?? null,
+        latestDeliverables: latestDeliverables.results,
         provider: { name: "NVIDIA API", model: env.NVIDIA_MODEL, freeAllowanceConfirmed: env.NVIDIA_FREE_ALLOWANCE_REMAINING === "true" },
         costPolicy: { allowPaidSpend: false, maxCostInr: 0 },
       });
     }
     if (request.method === "GET" && path === "/api/opportunities") {
       return json({ opportunities: await listOpportunities(env.DB) });
+    }
+    if (request.method === "GET" && path === "/api/deliverables") {
+      const result = await env.DB.prepare("SELECT * FROM deliverables ORDER BY created_at DESC LIMIT 50").all();
+      return json({ deliverables: result.results });
+    }
+    if (request.method === "POST" && path === "/api/deliverables/research") {
+      const input = researchRequestSchema.parse(await parseBody(request));
+      if (input.opportunityId) {
+        const exists = await env.DB.prepare("SELECT id FROM opportunities WHERE id = ?").bind(input.opportunityId).first();
+        if (!exists) return json({ error: "Opportunity not found" }, { status: 404 });
+      }
+      const jobId = await enqueueJob(env.DB, "research_brief", input, 95);
+      return json({ ok: true, jobId, message: "Sourced research queued. Jarvis will collect evidence before writing a verdict." }, { status: 201 });
     }
 
     const actionMatch = path.match(/^\/api\/opportunities\/([^/]+)\/action$/);

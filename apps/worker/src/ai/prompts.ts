@@ -58,8 +58,9 @@ export function buildStrategistPrompt(
   opportunity: Record<string, unknown>,
   founderRules: string[],
   learnings: Array<Record<string, unknown>>,
+  sourcedResearch: Record<string, unknown> | null = null,
 ): string {
-  return `Evaluate this opportunity:\n${JSON.stringify(opportunity)}\n\nActive founder rules:\n${founderRules.map((rule) => `- ${rule}`).join("\n")}\n\nRelevant prior learnings:\n${JSON.stringify(learnings)}\n\nReturn JSON with recommendation (continue_research, candidate, or reject), concise rationale, evidenceGaps, validationExperiment { hypothesis, method, successMetric, killCondition }, and confidence from 0 to 100.`;
+  return `Evaluate this opportunity:\n${JSON.stringify(opportunity)}\n\nSourced research deliverable (use this as the evidence base; do not invent facts beyond it):\n${JSON.stringify(sourcedResearch)}\n\nActive founder rules:\n${founderRules.map((rule) => `- ${rule}`).join("\n")}\n\nRelevant prior learnings:\n${JSON.stringify(learnings)}\n\nReturn JSON with recommendation (continue_research, candidate, or reject), concise rationale, evidenceGaps, validationExperiment { hypothesis, method, successMetric, killCondition }, and confidence from 0 to 100.`;
 }
 
 export const LEARNING_SYSTEM_PROMPT = `You are the Jarvis Learning Engine. Compare a completed experiment's prediction with its actual result.

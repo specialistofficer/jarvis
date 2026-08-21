@@ -5,6 +5,7 @@ export interface GenerateRequest<T> {
   prompt: string;
   schema: z.ZodType<T>;
   temperature?: number;
+  maxTokens?: number;
 }
 
 export interface GenerationResult<T> {

@@ -4,6 +4,7 @@ import { runScoutJob } from "./scout";
 import { runStrategistJob } from "./strategist";
 import { runLearningReview } from "./learning";
 import { generateDailyReport } from "./report";
+import { runResearchBrief } from "./research";
 
 interface JobRow {
   id: string;
@@ -59,6 +60,9 @@ async function executeAcquiredJob(env: Env, job: JobRow): Promise<void> {
     if (job.type === "scout") {
       const result = await runScoutJob(env, job.id);
       resultSummary = `Scanned for opportunities: saved ${result.inserted} new and skipped ${result.duplicates} duplicate${result.duplicates === 1 ? "" : "s"}.`;
+    } else if (job.type === "research_brief") {
+      const result = await runResearchBrief(env, job.id, payload);
+      resultSummary = `Created “${result.title}” from ${result.sourceCount} public sources. Verdict: ${result.verdict.replaceAll("_", " ")}.`;
     } else if (job.type === "research_opportunity") {
       const result = await runStrategistJob(env, job.id, payload);
       resultSummary = `Strategist recommendation: ${result.recommendation.replaceAll("_", " ")}. ${result.rationale}`;
@@ -78,7 +82,7 @@ async function executeAcquiredJob(env: Env, job: JobRow): Promise<void> {
     await env.DB.prepare(
       "UPDATE jobs SET status = 'completed', result_summary = ?, completed_at = datetime('now'), last_error = NULL, updated_at = datetime('now') WHERE id = ?",
     ).bind(resultSummary, job.id).run();
-    await scheduleNextRecurringJob(env.DB, job.type, job.id);
+    await scheduleNextRecurringJob(env.DB, job.type, job.id, payload);
     console.log(JSON.stringify({ event: "job_complete", jobId: job.id, type: job.type, durationMs: Date.now() - start, success: true }));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -102,9 +106,9 @@ async function executeAcquiredJob(env: Env, job: JobRow): Promise<void> {
   }
 }
 
-async function scheduleNextRecurringJob(db: D1Database, completedType: string, completedId: string): Promise<void> {
+async function scheduleNextRecurringJob(db: D1Database, completedType: string, completedId: string, originalPayload: Record<string, unknown>): Promise<void> {
   const recurring: Record<string, { priority: number; reason: string }> = {
-    scout: { priority: 50, reason: "daily_scout" },
+    research_brief: { priority: 70, reason: "daily_sourced_research" },
     learning_review: { priority: 55, reason: "daily_learning_review" },
     daily_report: { priority: 45, reason: "daily_report" },
   };
@@ -116,7 +120,11 @@ async function scheduleNextRecurringJob(db: D1Database, completedType: string, c
      WHERE NOT EXISTS (
        SELECT 1 FROM jobs WHERE type = ? AND status IN ('queued', 'running', 'deferred') AND id <> ?
      )`,
-  ).bind(crypto.randomUUID(), completedType, config.priority, JSON.stringify({ reason: config.reason }), completedType, completedId).run();
+  ).bind(
+    crypto.randomUUID(), completedType, config.priority,
+    JSON.stringify(completedType === "research_brief" ? { ...originalPayload, reason: config.reason } : { reason: config.reason }),
+    completedType, completedId,
+  ).run();
 }
 
 export async function runHeartbeat(env: Env): Promise<{ processed: boolean }> {

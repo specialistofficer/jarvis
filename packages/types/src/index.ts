@@ -82,10 +82,49 @@ export const learningOutputSchema = z.object({
   appliesTo: z.string().min(3).max(300),
 });
 
+export const researchBriefSchema = z.object({
+  title: z.string().min(10).max(180),
+  executiveSummary: z.string().min(50).max(1200),
+  verdict: z.enum(["pursue", "validate_more", "reject"]),
+  confidence: score,
+  findings: z.array(z.object({
+    finding: z.string().min(25).max(700),
+    evidenceUrls: z.array(z.string().url()).min(1).max(5),
+    confidence: score,
+    implication: z.string().min(20).max(500),
+  })).min(2).max(5),
+  alternatives: z.array(z.object({
+    name: z.string().min(2).max(120),
+    url: z.string().url(),
+    positioning: z.string().min(15).max(400),
+    gap: z.string().min(10).max(400),
+  })).max(6),
+  opportunity: z.object({
+    exactProblem: z.string().min(25).max(700),
+    targetUser: z.string().min(10).max(400),
+    differentiation: z.string().min(20).max(600),
+    monetization: z.string().min(15).max(500),
+    biggestRisk: z.string().min(15).max(500),
+  }),
+  validationExperiment: z.object({
+    hypothesis: z.string().min(20).max(600),
+    method: z.string().min(20).max(800),
+    successMetric: z.string().min(10).max(400),
+    killCondition: z.string().min(10).max(400),
+    steps: z.array(z.string().min(8).max(300)).min(3).max(7),
+  }),
+  evidenceLimits: z.array(z.string().min(10).max(400)).min(1).max(6),
+  founderDecision: z.object({
+    question: z.string().min(15).max(400),
+    options: z.array(z.string().min(5).max(250)).min(2).max(4),
+  }),
+});
+
 export type ScoutOpportunity = z.infer<typeof scoutOpportunitySchema>;
 export type ScoutOutput = z.infer<typeof scoutOutputSchema>;
 export type StrategistOutput = z.infer<typeof strategistOutputSchema>;
 export type LearningOutput = z.infer<typeof learningOutputSchema>;
+export type ResearchBrief = z.infer<typeof researchBriefSchema>;
 
 export const opportunityActionSchema = z.object({
   action: z.enum(["promote", "reject", "deep_research", "duplicate"]),

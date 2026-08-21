@@ -21,8 +21,31 @@ export interface SystemOverview {
   recentAgentRuns: Array<Record<string, unknown>>;
   opportunityCounts: Array<{ status: string; count: number }>;
   latestReport: Record<string, unknown> | null;
+  latestDeliverables: Array<Record<string, unknown>>;
   provider: { name: string; model: string; freeAllowanceConfirmed: boolean };
   costPolicy: { allowPaidSpend: boolean; maxCostInr: number };
+}
+
+export interface DeliverableRecord {
+  id: string;
+  deliverable_type: string;
+  title: string;
+  status: string;
+  summary: string;
+  content_markdown: string;
+  content_json: string;
+  source_count: number;
+  related_opportunity_id: string | null;
+  created_at: string;
+}
+
+export interface ReportRecord {
+  id: string;
+  report_type: string;
+  period_start: string;
+  summary: string;
+  content_json: string;
+  created_at: string;
 }
 
 export interface AssistantMessage {
@@ -72,6 +95,12 @@ export const api = {
   today: () => request<TodaySummary>("/api/today"),
   systemOverview: () => request<SystemOverview>("/api/system/overview"),
   opportunities: () => request<{ opportunities: OpportunityRecord[] }>("/api/opportunities"),
+  deliverables: () => request<{ deliverables: DeliverableRecord[] }>("/api/deliverables"),
+  reports: () => request<{ reports: ReportRecord[] }>("/api/reports"),
+  requestResearch: (topic: string) => request<{ ok: true; jobId: string; message: string }>(
+    "/api/deliverables/research",
+    { method: "POST", body: JSON.stringify({ topic }) },
+  ),
   opportunityAction: (id: string, action: OpportunityAction) => request<{ ok: true; status: string }>(
     `/api/opportunities/${encodeURIComponent(id)}/action`,
     { method: "POST", body: JSON.stringify(action) },

@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { OpportunityAction, OpportunityRecord, TodaySummary } from "@jarvis/types";
 import { api, ApiError } from "./api";
-import type { AssistantMessage, AssistantProposal, SystemOverview } from "./api";
+import type { AssistantMessage, AssistantProposal, DeliverableRecord, ReportRecord, SystemOverview } from "./api";
 
-type View = "Assistant" | "Opportunities" | "Activity" | "Settings";
+type View = "Deliverables" | "Assistant" | "Opportunities" | "Activity" | "Settings";
 
 interface SpeechRecognitionEventLike { results: { [index: number]: { [index: number]: { transcript: string } } }; }
 interface SpeechRecognitionLike {
@@ -17,6 +17,7 @@ type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 declare global { interface Window { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor; } }
 
 const nav: Array<{ view: View; icon: string; label: string }> = [
+  { view: "Deliverables", icon: "▤", label: "Results" },
   { view: "Assistant", icon: "J", label: "Jarvis" },
   { view: "Opportunities", icon: "◇", label: "Ideas" },
   { view: "Activity", icon: "↗", label: "Activity" },
@@ -100,7 +101,7 @@ function AssistantView({ today, overview, messages, proposal, sending, onSend, o
         {proposal && <div className="proposal-card"><span className="eyebrow">Confirmation required</span><h3>{proposal.summary}</h3><p>Jarvis ne abhi koi change nahi kiya. Yeh proposal 30 minutes mein expire hoga.</p><div><button className="primary" disabled={sending} onClick={async () => { const result = await onDecision("confirm"); if (result && voiceReplies) speak(result); }}>Confirm action</button><button disabled={sending} onClick={() => void onDecision("cancel")}>Keep things unchanged</button></div></div>}
         <div ref={chatEnd} />
       </div>
-      <div className="quick-prompts">{["Give me a briefing", "What runs next?", "Run Opportunity Scout", "Pause Jarvis automation"].map((prompt) => <button key={prompt} disabled={sending} onClick={() => void submit(prompt)}>{prompt}</button>)}</div>
+      <div className="quick-prompts">{["What research did you produce?", "What runs next?", "Run sourced research", "Pause Jarvis automation"].map((prompt) => <button key={prompt} disabled={sending} onClick={() => void submit(prompt)}>{prompt}</button>)}</div>
       {voiceError && <div className="voice-error">{voiceError}</div>}
       <form className="composer" onSubmit={(event) => { event.preventDefault(); void submit(input); }}>
         <textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="Message Jarvis…" rows={1} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(input); } }} />
@@ -108,6 +109,41 @@ function AssistantView({ today, overview, messages, proposal, sending, onSend, o
         <button className="send" disabled={sending || !input.trim()} aria-label="Send message">↑</button>
       </form>
     </section>
+  </div>;
+}
+
+function parseObject(value: string): Record<string, unknown> {
+  try { const parsed = JSON.parse(value) as unknown; return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {}; }
+  catch { return {}; }
+}
+
+function DeliverablesView({ deliverables, reports, busy, onResearch }: { deliverables: DeliverableRecord[]; reports: ReportRecord[]; busy: boolean; onResearch: (topic: string) => Promise<void> }) {
+  const [topic, setTopic] = useState("AI wardrobe and digital closet apps: real user problems, competitors, monetization and zero-cost validation");
+  const latest = deliverables[0];
+  const content = latest ? parseObject(latest.content_json) : {};
+  const brief = (content.brief && typeof content.brief === "object" ? content.brief : content) as Record<string, unknown>;
+  const findings = Array.isArray(brief.findings) ? brief.findings as Array<Record<string, unknown>> : [];
+  const alternatives = Array.isArray(brief.alternatives) ? brief.alternatives as Array<Record<string, unknown>> : [];
+  const sources = Array.isArray(content.sources) ? content.sources as Array<Record<string, unknown>> : [];
+  const experiment = brief.validationExperiment && typeof brief.validationExperiment === "object" ? brief.validationExperiment as Record<string, unknown> : null;
+  const decision = brief.founderDecision && typeof brief.founderDecision === "object" ? brief.founderDecision as Record<string, unknown> : null;
+  const latestReport = reports[0];
+  const reportContent = latestReport ? parseObject(latestReport.content_json) : {};
+
+  return <div className="simple-page deliverables-page">
+    <div className="page-intro"><span className="eyebrow">Useful output first</span><h1>Research & reports</h1><p>Yahan sirf Jarvis ke actual deliverables hain—citations, conclusion aur next decision ke saath.</p></div>
+    <form className="panel research-request" onSubmit={(event) => { event.preventDefault(); void onResearch(topic); }}><div><span className="eyebrow">Give Jarvis an outcome</span><h2>What should I research?</h2><p>Topic likhiye. Jarvis public sources collect karke cited brief banayega; unsupported claims ko result nahi bolega.</p></div><textarea value={topic} onChange={(event) => setTopic(event.target.value)} minLength={10} maxLength={300} rows={3} /><button className="primary" disabled={busy || topic.trim().length < 10}>{busy ? "Working…" : "Queue sourced research"}</button></form>
+    {!latest && <div className="empty-state"><strong>No useful deliverable yet.</strong><br />First sourced research queue karein. Activity alone ko result nahi maana jayega.</div>}
+    {latest && <article className="research-brief panel">
+      <div className="brief-heading"><div><span className="eyebrow">Latest {String(content.mode ?? latest.deliverable_type).replaceAll("_", " ")}</span><h2>{latest.title}</h2><p>{latest.summary}</p></div><div className="brief-score"><strong>{Number(brief.confidence ?? 0)}%</strong><small>confidence</small></div></div>
+      <div className="brief-meta"><span>{latest.source_count} public sources</span><span className={latest.status === "completed" ? "good" : "warn"}>{latest.status.replaceAll("_", " ")}</span><span>{localTime(latest.created_at)}</span>{brief.verdict ? <span>Verdict: {String(brief.verdict).replaceAll("_", " ")}</span> : null}</div>
+      {findings.length > 0 && <section className="brief-section"><span className="eyebrow">Evidence-backed findings</span>{findings.map((finding, index) => <div className="finding" key={index}><h3>{index + 1}. {String(finding.finding)}</h3><p>{String(finding.implication ?? "")}</p><div className="citation-list">{(Array.isArray(finding.evidenceUrls) ? finding.evidenceUrls : []).map((url, urlIndex) => <a key={String(url)} href={String(url)} target="_blank" rel="noreferrer">Source {urlIndex + 1} ↗</a>)}</div></div>)}</section>}
+      {alternatives.length > 0 && <section className="brief-section"><span className="eyebrow">Existing alternatives & gaps</span><div className="alternative-grid">{alternatives.map((item, index) => <a className="alternative" href={String(item.url)} target="_blank" rel="noreferrer" key={index}><strong>{String(item.name)} ↗</strong><p>{String(item.positioning)}</p><small>Gap: {String(item.gap)}</small></a>)}</div></section>}
+      {experiment && <section className="brief-section experiment"><span className="eyebrow">INR 0 validation experiment</span><h3>{String(experiment.hypothesis)}</h3><p>{String(experiment.method)}</p><div className="metric-pair"><div><small>Success</small><strong>{String(experiment.successMetric)}</strong></div><div><small>Kill condition</small><strong>{String(experiment.killCondition)}</strong></div></div><ol>{(Array.isArray(experiment.steps) ? experiment.steps : []).map((step, index) => <li key={index}>{String(step)}</li>)}</ol></section>}
+      {decision && <section className="founder-decision"><span className="eyebrow">Your decision</span><h3>{String(decision.question)}</h3><div>{(Array.isArray(decision.options) ? decision.options : []).map((option, index) => <span key={index}>{String(option)}</span>)}</div></section>}
+      <details className="source-appendix"><summary>All {sources.length} inspected sources</summary><div>{sources.map((source, index) => <a href={String(source.url)} target="_blank" rel="noreferrer" key={index}><span>{index + 1}</span><div><strong>{String(source.title)}</strong><small>{String(source.sourceType).replaceAll("_", " ")} · {String(source.signal ?? "public source")}</small></div></a>)}</div></details>
+    </article>}
+    <section className="panel daily-brief"><span className="eyebrow">Daily executive report</span><h2>{latestReport ? `Founder brief · ${latestReport.period_start}` : "No daily report yet"}</h2><p>{latestReport?.summary ?? "A daily report will summarize deliverables, decisions and experiments—not job counts alone."}</p>{Array.isArray(reportContent.recommendedNextActions) && <div className="report-actions">{(reportContent.recommendedNextActions as unknown[]).map((item, index) => <div key={index}><span>{index + 1}</span><strong>{String(item)}</strong></div>)}</div>}</section>
   </div>;
 }
 
@@ -150,20 +186,22 @@ function SettingsView({ today, overview, onStatus, onRun, onLogout }: { today: T
 }
 
 export function App() {
-  const [view, setView] = useState<View>("Assistant");
+  const [view, setView] = useState<View>("Deliverables");
   const [today, setToday] = useState<TodaySummary | null>(null);
   const [opportunities, setOpportunities] = useState<OpportunityRecord[]>([]);
   const [overview, setOverview] = useState<SystemOverview | null>(null);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [proposal, setProposal] = useState<AssistantProposal | null>(null);
+  const [deliverables, setDeliverables] = useState<DeliverableRecord[]>([]);
+  const [reports, setReports] = useState<ReportRecord[]>([]);
   const [authState, setAuthState] = useState<"checking" | "required" | "authenticated">("checking");
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState<string | null>(null); const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const [todayData, opportunityData, overviewData, assistantData] = await Promise.all([api.today(), api.opportunities(), api.systemOverview(), api.assistantHistory()]);
-      setToday(todayData); setOpportunities(opportunityData.opportunities); setOverview(overviewData); setMessages(assistantData.messages); setProposal(assistantData.proposal); setError(null); setAuthState("authenticated");
+      const [todayData, opportunityData, overviewData, assistantData, deliverableData, reportData] = await Promise.all([api.today(), api.opportunities(), api.systemOverview(), api.assistantHistory(), api.deliverables(), api.reports()]);
+      setToday(todayData); setOpportunities(opportunityData.opportunities); setOverview(overviewData); setMessages(assistantData.messages); setProposal(assistantData.proposal); setDeliverables(deliverableData.deliverables); setReports(reportData.reports); setError(null); setAuthState("authenticated");
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) setAuthState("required");
       else { setError(cause instanceof Error ? cause.message : "Jarvis is temporarily unavailable"); setAuthState("authenticated"); }
@@ -176,6 +214,7 @@ export function App() {
   const onStatus = async (status: "running" | "paused") => { if (!confirmBrowserAction(`${status === "paused" ? "Pause" : "Resume"} autonomous Jarvis?`)) return; setBusy(true); try { await api.systemStatus(status); await refresh(); } finally { setBusy(false); } };
   const onRun = async () => { if (!confirmBrowserAction("Run one due job now?")) return; setBusy(true); try { await api.runHeartbeat(); await refresh(); } finally { setBusy(false); } };
   const onOpportunityAction = async (id: string, action: OpportunityAction["action"], title: string) => { if (!confirmBrowserAction(`${action.replaceAll("_", " ")} “${title}”?`)) return; setBusy(true); try { await api.opportunityAction(id, { action }); await refresh(); } finally { setBusy(false); } };
+  const onResearch = async (topic: string) => { setBusy(true); setError(null); try { const result = await api.requestResearch(topic.trim()); setError(result.message + " Activity page par progress check kar sakte hain."); await refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Research could not be queued"); } finally { setBusy(false); } };
   const sendMessage = async (text: string): Promise<string | null> => {
     setBusy(true); setError(null); setMessages((current) => [...current, { id: `local-${crypto.randomUUID()}`, role: "user", content: text, created_at: new Date().toISOString() }]);
     try { const result = await api.assistantChat(text); setMessages((current) => [...current, { id: `local-${crypto.randomUUID()}`, role: "assistant", content: result.reply, created_at: new Date().toISOString() }]); setProposal(result.proposal); return result.reply; }
@@ -192,5 +231,5 @@ export function App() {
   if (authState === "checking") return <div className="boot-screen"><div className="jarvis-orb thinking"><Mark active /></div><p>Connecting to Jarvis…</p></div>;
   if (authState === "required") return <div className="auth-shell"><form className="auth-card" onSubmit={async (event) => { event.preventDefault(); setBusy(true); setAuthError(null); try { await api.login(email, password); setPassword(""); await refresh(); } catch (cause) { setAuthError(cause instanceof Error ? cause.message : "Login failed"); } finally { setBusy(false); } }}><Mark active /><span className="eyebrow">Private founder access</span><h1>Sign in to Jarvis</h1><p>Enter your founder credentials. Email is never pre-filled or bundled into the website.</p><label htmlFor="email">Email</label><input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" placeholder="you@example.com" required /><label htmlFor="password">Password</label><input id="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" placeholder="Your password" required />{authError && <div className="auth-error">{authError}</div>}<button className="primary" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button><small>One founder account · secure seven-day session</small></form></div>;
 
-  return <div className="app-shell"><aside><div className="brand"><Mark active /><div><strong>Jarvis</strong><small>Founder assistant</small></div></div><nav>{nav.map((item) => <button key={item.view} className={view === item.view ? "active" : ""} onClick={() => setView(item.view)}><span>{item.icon}</span>{item.label}</button>)}</nav><div className="sidebar-bottom"><div><span className={`status-dot ${today?.systemStatus ?? "paused"}`} /><span><strong>{today?.systemStatus ?? "offline"}</strong><small>₹0 guard active</small></span></div><button className="logout-link" onClick={logout}>↪ Log out</button></div></aside><main>{view !== "Assistant" && <header><div><span className="eyebrow">Jarvis / {view}</span></div><div className="header-actions"><button onClick={() => void refresh()} disabled={busy}>↻ Refresh</button><button className="logout-button" onClick={logout}>Log out</button></div></header>}{error && <div className="error-banner"><strong>Jarvis notice</strong><span>{error}</span></div>}{view === "Assistant" && <AssistantView today={today} overview={overview} messages={messages} proposal={proposal} sending={busy} onSend={sendMessage} onDecision={decideProposal} />}{view === "Opportunities" && <OpportunitiesView items={opportunities} onAction={onOpportunityAction} />}{view === "Activity" && <ActivityView overview={overview} />}{view === "Settings" && <SettingsView today={today} overview={overview} onStatus={onStatus} onRun={onRun} onLogout={logout} />}</main><nav className="bottom-nav">{nav.map((item) => <button key={item.view} className={view === item.view ? "active" : ""} onClick={() => setView(item.view)}><span>{item.icon}</span><small>{item.label}</small></button>)}</nav></div>;
+  return <div className="app-shell"><aside><div className="brand"><Mark active /><div><strong>Jarvis</strong><small>Founder assistant</small></div></div><nav>{nav.map((item) => <button key={item.view} className={view === item.view ? "active" : ""} onClick={() => setView(item.view)}><span>{item.icon}</span>{item.label}</button>)}</nav><div className="sidebar-bottom"><div><span className={`status-dot ${today?.systemStatus ?? "paused"}`} /><span><strong>{today?.systemStatus ?? "offline"}</strong><small>₹0 guard active</small></span></div><button className="logout-link" onClick={logout}>↪ Log out</button></div></aside><main>{view !== "Assistant" && <header><div><span className="eyebrow">Jarvis / {view}</span></div><div className="header-actions"><button onClick={() => void refresh()} disabled={busy}>↻ Refresh</button><button className="logout-button" onClick={logout}>Log out</button></div></header>}{error && <div className="error-banner"><strong>Jarvis notice</strong><span>{error}</span></div>}{view === "Deliverables" && <DeliverablesView deliverables={deliverables} reports={reports} busy={busy} onResearch={onResearch} />}{view === "Assistant" && <AssistantView today={today} overview={overview} messages={messages} proposal={proposal} sending={busy} onSend={sendMessage} onDecision={decideProposal} />}{view === "Opportunities" && <OpportunitiesView items={opportunities} onAction={onOpportunityAction} />}{view === "Activity" && <ActivityView overview={overview} />}{view === "Settings" && <SettingsView today={today} overview={overview} onStatus={onStatus} onRun={onRun} onLogout={logout} />}</main><nav className="bottom-nav">{nav.map((item) => <button key={item.view} className={view === item.view ? "active" : ""} onClick={() => setView(item.view)}><span>{item.icon}</span><small>{item.label}</small></button>)}</nav></div>;
 }

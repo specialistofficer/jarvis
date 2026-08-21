@@ -5,7 +5,7 @@ export async function generateDailyReport(env: Env): Promise<{ reportId: string;
   const existing = await env.DB.prepare("SELECT id FROM reports WHERE report_type = 'daily' AND period_start = ? LIMIT 1")
     .bind(today).first<{ id: string }>();
 
-  const [status, jobs, opportunities, clothmatics, experiments, learnings, decisions] = await Promise.all([
+  const [status, jobs, opportunities, clothmatics, experiments, learnings, decisions, deliverables] = await Promise.all([
     env.DB.prepare("SELECT value FROM system_settings WHERE key = 'system_status'").first<{ value: string }>(),
     env.DB.prepare(
       `SELECT status, COUNT(*) AS count FROM jobs WHERE date(updated_at) = date('now') GROUP BY status`,
@@ -26,12 +26,18 @@ export async function generateDailyReport(env: Env): Promise<{ reportId: string;
       .all<Record<string, unknown>>(),
     env.DB.prepare("SELECT decision_type, decision, reasoning_summary, confidence FROM decisions ORDER BY created_at DESC LIMIT 8")
       .all<Record<string, unknown>>(),
+    env.DB.prepare(
+      "SELECT id, deliverable_type, title, status, summary, source_count, created_at FROM deliverables ORDER BY created_at DESC LIMIT 5",
+    ).all<Record<string, unknown>>(),
   ]);
 
   const best = opportunities.results[0];
-  const summary = best
-    ? `Top current opportunity: ${String(best.title)} (score ${String(best.overall_score)}, confidence ${String(best.confidence_score)}).`
-    : "No opportunity cleared our validation threshold today.";
+  const latestDeliverable = deliverables.results[0];
+  const summary = latestDeliverable
+    ? `Latest useful output: ${String(latestDeliverable.title)} — ${String(latestDeliverable.summary)}`
+    : best
+      ? `No sourced deliverable yet. Top unvalidated opportunity: ${String(best.title)} (score ${String(best.overall_score)}, confidence ${String(best.confidence_score)}).`
+      : "No sourced deliverable or validated opportunity exists yet.";
   const content = {
     title: "JARVIS DAILY BRIEF",
     date: today,
@@ -42,6 +48,7 @@ export async function generateDailyReport(env: Env): Promise<{ reportId: string;
     experiments: experiments.results,
     whatWeLearned: learnings.results,
     whatChangedInOurThinking: decisions.results,
+    latestDeliverables: deliverables.results,
     recommendedNextActions: best
       ? ["Close the highest-impact evidence gap before promotion.", "Prefer a measurable INR 0 validation experiment."]
       : ["Continue focused evidence collection; do not generate filler ideas."],
