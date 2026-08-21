@@ -20,6 +20,7 @@ concurrency:
 
 jobs:
   render:
+    # One run drains at most five tasks so free-runner usage stays bounded.
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
