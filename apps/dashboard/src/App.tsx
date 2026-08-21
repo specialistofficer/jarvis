@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { OpportunityAction, OpportunityRecord, TodaySummary } from "@jarvis/types";
-import { api, ApiError } from "./api";
+import { api, ApiError, API_BASE } from "./api";
 import type { AssistantMessage, AssistantProposal, DeliverableRecord, GrowthAsset, GrowthOverview, MediaAsset, MediaOverview, ReportRecord, SystemOverview } from "./api";
 
 type View = "Research" | "Media" | "Leads" | "Published" | "Analytics" | "Jarvis" | "Diagnostic" | "Settings";
@@ -199,6 +199,28 @@ function JarvisView({ messages, onSend, busy }: any) {
 
 function DiagnosticView({ overview, onStatus, today }: any) {
   return (
+    <div>
+    <div className="panel">
+      <div className="panel-title">Connected Resources</div>
+      <div className="list-item flex-between">
+        <div>
+          <strong>Google Drive</strong>
+          <p style={{fontSize: 12, color: 'var(--text-muted)'}}>Archive & Data Warehouse</p>
+        </div>
+        <button onClick={async () => {
+          try {
+            const res = await fetch(API_BASE + "/api/connections/google_drive/auth", {
+              headers: { "Authorization": "Bearer " + sessionStorage.getItem("jarvis_founder_token") }
+            });
+            const data = await res.json();
+            if (data.url) window.location.href = data.url;
+            else alert(data.error || "Failed to get auth URL");
+          } catch (err) {
+            alert("Error initiating OAuth");
+          }
+        }}>Connect</button>
+      </div>
+    </div>
     <div className="panel">
       <div className="panel-title">Technical Diagnostics</div>
       <div className="flex-between" style={{marginBottom: 20}}>
@@ -213,6 +235,7 @@ function DiagnosticView({ overview, onStatus, today }: any) {
           </div>
         ))}
       </div>
+    </div>
     </div>
   );
 }
@@ -241,7 +264,26 @@ export function App() {
       else setAuthState("authenticated");
     }
   }, []);
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.pathname === "/oauth/callback/google_drive") {
+      const code = url.searchParams.get("code");
+      if (code) {
+        fetch(API_BASE + "/api/connections/google_drive/callback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + sessionStorage.getItem("jarvis_founder_token") },
+          body: JSON.stringify({ code, redirectUri: window.location.origin + "/oauth/callback/google_drive" })
+        }).then(() => {
+          window.location.href = "/";
+        }).catch(() => {
+          alert("OAuth failed");
+          window.location.href = "/";
+        });
+        return;
+      }
+    }
+    void refresh();
+  }, [refresh]);
 
   const logout = () => { api.logout(); setAuthState("required"); };
   const onStatus = async (status: "running" | "paused") => { setBusy(true); await api.systemStatus(status); await refresh(); setBusy(false); };

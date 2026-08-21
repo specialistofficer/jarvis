@@ -3,6 +3,7 @@ import { runHeartbeat } from "./jobs/runner";
 import { handleApi } from "./routes/api";
 import { verifySessionToken } from "./auth";
 import { handleMediaPublicRoute } from "./mediaRoutes";
+import { handleConnectionsApi } from "./routes/connections";
 
 function applyCors(response: Response, request: Request, env: Env): Response {
   const origin = request.headers.get("origin");
@@ -31,6 +32,8 @@ export default {
         return applyCors(Response.json({ error: "Founder authentication required" }, { status: 401 }), request, env);
       }
     }
+    const connectionsResponse = await handleConnectionsApi(request, env);
+    if (connectionsResponse) return applyCors(connectionsResponse, request, env);
     const response = await handleApi(request, env);
     return applyCors(response, request, env);
   },

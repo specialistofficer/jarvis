@@ -1,7 +1,7 @@
 import type { OpportunityAction, OpportunityRecord, TodaySummary } from "@jarvis/types";
 
 const configuredApiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "");
-const API_BASE = configuredApiBase || (typeof window !== "undefined" && window.location.hostname.endsWith("pages.dev")
+export const API_BASE = configuredApiBase || (typeof window !== "undefined" && window.location.hostname.endsWith("pages.dev")
   ? "https://jarvis-api.chiragsharma376.workers.dev"
   : "");
 
