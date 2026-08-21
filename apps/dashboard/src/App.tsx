@@ -30,20 +30,23 @@ function ResearchView({ deliverables, reports, messages, busy, onResearch, onSen
   const [input, setInput] = useState("");
   return (
     <div>
-      <div className="panel chat-container" style={{marginBottom: 20}}>
-        <div className="panel-title">Ask Jarvis / Request Research</div>
-        <div className="chat-messages" style={{maxHeight: '300px', overflowY: 'auto', marginBottom: '10px'}}>
+      <div className="panel" style={{marginBottom: 20}}>
+        <div className="panel-title">Command Center</div>
+        <div style={{maxHeight: '300px', overflowY: 'auto', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', fontFamily: 'monospace', fontSize: '13px'}}>
+          {messages.length === 0 && <div style={{color: 'var(--text-muted)'}}>System ready. Waiting for input...</div>}
           {messages.map((m: any) => (
-            <div key={m.id} className={`message ${m.role}`}>
-              <div className="avatar">{m.role === 'user' ? 'U' : 'J'}</div>
-              <div className="bubble">{m.content}</div>
+            <div key={m.id} style={{color: m.role === 'user' ? 'var(--text-muted)' : 'var(--text-main)'}}>
+              <span style={{color: m.role === 'user' ? 'var(--accent)' : '#a855f7', marginRight: '8px'}}>
+                {m.role === 'user' ? '>' : 'JARVIS:'}
+              </span>
+              <span style={{whiteSpace: 'pre-wrap'}}>{m.content}</span>
             </div>
           ))}
         </div>
         <div className="flex-between gap-4">
-          <input type="text" className="chat-input" style={{flex: 1, padding: '10px'}} value={input} onChange={e => setInput(e.target.value)} placeholder="Ask a question or enter a research topic..." />
-          <button className="secondary" disabled={busy || !input} onClick={() => { if(input) { onSend(input); setInput(""); } }}>Ask Jarvis</button>
-          <button className="primary" disabled={busy || !input} onClick={() => void onResearch(input)}>Run Deep Research</button>
+          <input type="text" style={{flex: 1, padding: '10px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', color: '#fff'}} value={input} onChange={e => setInput(e.target.value)} placeholder="Execute a command or enter a research topic..." onKeyDown={e => { if (e.key === 'Enter' && input && !busy) { onSend(input); setInput(""); } }} />
+          <button className="secondary" disabled={busy || !input} onClick={() => { if(input) { onSend(input); setInput(""); } }}>Execute</button>
+          <button className="primary" disabled={busy || !input} onClick={() => void onResearch(input)}>Deep Research</button>
         </div>
       </div>
       <div className="grid-2">
