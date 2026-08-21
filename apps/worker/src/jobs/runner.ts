@@ -88,6 +88,10 @@ async function executeAcquiredJob(env: Env, job: JobRow): Promise<void> {
     } else if (job.type === "media_production") {
       const result = await runMediaProduction(env, payload);
       resultSummary = `Prepared ${result.kind} media ${result.mediaId}: ${result.status} via ${result.provider}.`;
+    } else if (job.type === "trend_scout") {
+      const { runTrendScout } = await import("./trend_scout");
+      const result = await runTrendScout(env, job.id, payload);
+      resultSummary = `Scouted trends (${result.topics.join(", ")}) and generated ${result.assetsCreated} video scripts.`;
     }
     else throw new Error(`Unknown job type: ${job.type}`);
 

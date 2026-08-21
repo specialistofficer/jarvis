@@ -21,4 +21,5 @@ export interface Env {
   LINKEDIN_CLIENT_SECRET?: string;
   X_CLIENT_ID?: string;
   X_CLIENT_SECRET?: string;
+  REPLICATE_API_TOKEN?: string;
 }

@@ -53,7 +53,7 @@ export async function runMediaProduction(env: Env, payload: Record<string, unkno
     .bind(asset.id).first<{ id: string; media_kind: string; status: string; provider: string }>();
   if (existing) return { mediaId: existing.id, kind: existing.media_kind, status: existing.status, provider: existing.provider };
 
-  const isVideo = asset.asset_type.includes("video") || asset.channel.includes("youtube");
+  const isVideo = asset.asset_type.toLowerCase().includes("video") || asset.channel.toLowerCase().includes("youtube");
   const mediaId = crypto.randomUUID();
   const publicId = crypto.randomUUID();
   const kind = isVideo ? "video" : "image";
@@ -85,6 +85,30 @@ export async function runMediaProduction(env: Env, payload: Record<string, unkno
       const message = error instanceof Error ? error.message : String(error);
       await env.DB.prepare("UPDATE media_assets SET last_error = ?, updated_at = datetime('now') WHERE id = ?")
         .bind(`NVIDIA unavailable; branded renderer queued. ${message}`.slice(0, 1200), mediaId).run();
+    }
+  } else {
+    // Attempt Video Generation (e.g. via Replicate or Creatomate)
+    try {
+      if (!env.REPLICATE_API_TOKEN) throw new Error("REPLICATE_API_TOKEN not configured");
+      const response = await fetch("https://api.replicate.com/v1/predictions", {
+        method: "POST",
+        headers: { "Authorization": `Token ${env.REPLICATE_API_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          version: "39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b", // SVD or similar
+          input: { prompt, frames: asset.asset_type.includes("15s") ? 15 : 30 }
+        })
+      });
+      const data = await response.json().catch(() => ({})) as any;
+      if (!response.ok) throw new Error(`Video API failed: ${JSON.stringify(data)}`);
+      // Since video gen is async, we'd normally store the prediction ID and poll.
+      // For now, we update the provider to Replicate.
+      await env.DB.prepare(`UPDATE media_assets SET status = 'render_queued', provider = 'replicate', storage_key = ?, updated_at = datetime('now') WHERE id = ?`)
+        .bind(data.id || "pending", mediaId).run();
+      return { mediaId, kind, status: "render_queued", provider: "replicate" };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await env.DB.prepare("UPDATE media_assets SET last_error = ?, updated_at = datetime('now') WHERE id = ?")
+        .bind(`Video API unavailable. ${message}`.slice(0, 1200), mediaId).run();
     }
   }
   return { mediaId, kind, status: "render_queued", provider: "jarvis_renderer" };
