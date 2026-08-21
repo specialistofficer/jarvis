@@ -92,6 +92,10 @@ async function executeAcquiredJob(env: Env, job: JobRow): Promise<void> {
       const { runTrendScout } = await import("./trend_scout");
       const result = await runTrendScout(env, job.id, payload);
       resultSummary = `Scouted trends (${result.topics.join(", ")}) and generated ${result.assetsCreated} video scripts.`;
+    } else if (job.type === "outreach_scout") {
+      const { runOutreachScout } = await import("./outreach_scout");
+      const result = await runOutreachScout(env, job.id, payload);
+      resultSummary = `Scraped query and drafted ${result.leadsGenerated} personalized pitches for campaign ${result.campaignId}.`;
     }
     else throw new Error(`Unknown job type: ${job.type}`);
 
