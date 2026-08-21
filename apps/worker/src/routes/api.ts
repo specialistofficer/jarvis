@@ -284,6 +284,13 @@ export async function handleApi(request: Request, env: Env): Promise<Response> {
           ? json({ error: "A published asset cannot be deleted until its external post is handled." }, { status: 409 })
           : json({ error: "Growth asset not found" }, { status: 404 });
       }
+
+      if (status === "deleted" || status === "rejected") {
+        await env.DB.batch([
+          env.DB.prepare(`UPDATE media_assets SET status = ?, updated_at = datetime('now') WHERE growth_asset_id = ? AND status NOT IN ('published', 'deleted')`).bind(status, id),
+          env.DB.prepare(`UPDATE jobs SET status = 'completed', result_summary = 'Cancelled: growth asset ' || ? || '.' WHERE type = 'media_production' AND status IN ('queued', 'deferred') AND json_extract(payload, '$.growthAssetId') = ?`).bind(status, id)
+        ]);
+      }
       await env.DB.prepare(`INSERT INTO decisions (id, decision_type, subject_type, subject_id, reasoning_summary, decision, confidence)
         VALUES (?, 'growth_asset_action', 'growth_asset', ?, ?, ?, 100)`)
         .bind(crypto.randomUUID(), id, `Founder selected ${input.action}.`, input.action).run();
