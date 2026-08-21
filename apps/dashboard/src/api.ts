@@ -129,7 +129,7 @@ export const api = {
   startGrowth: (goalId = "goal_clothmatics_growth_v1") => request<{ ok: true; jobId: string; message: string }>(
     "/api/growth/start", { method: "POST", body: JSON.stringify({ goalId }) },
   ),
-  growthAssetAction: (id: string, action: "approve" | "reject" | "mark_published", externalUrl?: string) => request<{ ok: true; asset: GrowthAsset }>(
+  growthAssetAction: (id: string, action: "approve" | "reject" | "mark_published" | "delete", externalUrl?: string) => request<{ ok: true; asset: GrowthAsset }>(
     `/api/growth/assets/${encodeURIComponent(id)}/action`, { method: "POST", body: JSON.stringify({ action, ...(externalUrl ? { externalUrl } : {}) }) },
   ),
   addGrowthMetric: (metric: { goalId: string; assetId?: string; metricDate: string; channel: string; impressions: number; views: number; clicks: number; installs: number; leads: number; revenueInr: number; notes?: string }) => request<{ ok: true; id: string }>(

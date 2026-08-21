@@ -186,7 +186,7 @@ export async function runGrowthReview(env: Env, payload: Record<string, unknown>
       FROM growth_metrics WHERE goal_id = ?`).bind(goalId).first<Record<string, number>>(),
     env.DB.prepare(`SELECT a.id, a.title, a.channel, COALESCE(SUM(m.clicks),0) clicks, COALESCE(SUM(m.installs),0) installs,
       COALESCE(SUM(m.leads),0) leads FROM growth_assets a LEFT JOIN growth_metrics m ON m.asset_id = a.id
-      WHERE a.goal_id = ? GROUP BY a.id ORDER BY installs DESC, clicks DESC LIMIT 10`).bind(goalId).all<Record<string, unknown>>(),
+      WHERE a.goal_id = ? AND a.status != 'deleted' GROUP BY a.id ORDER BY installs DESC, clicks DESC LIMIT 10`).bind(goalId).all<Record<string, unknown>>(),
     env.DB.prepare("SELECT COUNT(*) count FROM growth_metrics WHERE goal_id = ?").bind(goalId).first<{ count: number }>(),
   ]);
   if (!goal) throw new Error("Growth goal not found");

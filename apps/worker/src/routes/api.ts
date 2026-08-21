@@ -32,7 +32,7 @@ const growthStartSchema = z.object({
 });
 
 const growthAssetActionSchema = z.object({
-  action: z.enum(["approve", "reject", "mark_published"]),
+  action: z.enum(["approve", "reject", "mark_published", "delete"]),
   externalUrl: z.string().url().max(1000).optional(),
 });
 
@@ -243,7 +243,7 @@ export async function handleApi(request: Request, env: Env): Promise<Response> {
     if (request.method === "GET" && path === "/api/growth/overview") {
       const [goal, assets, leads, metrics, reviews, experiments, totals] = await Promise.all([
         env.DB.prepare("SELECT * FROM growth_goals WHERE status = 'active' ORDER BY created_at ASC LIMIT 1").first<Record<string, unknown>>(),
-        env.DB.prepare("SELECT * FROM growth_assets ORDER BY created_at DESC LIMIT 60").all<Record<string, unknown>>(),
+        env.DB.prepare("SELECT * FROM growth_assets WHERE status != 'deleted' ORDER BY created_at DESC LIMIT 60").all<Record<string, unknown>>(),
         env.DB.prepare("SELECT * FROM growth_leads ORDER BY created_at DESC LIMIT 40").all<Record<string, unknown>>(),
         env.DB.prepare("SELECT * FROM growth_metrics ORDER BY metric_date DESC, created_at DESC LIMIT 100").all<Record<string, unknown>>(),
         env.DB.prepare("SELECT * FROM growth_reviews ORDER BY created_at DESC LIMIT 12").all<Record<string, unknown>>(),
@@ -266,13 +266,20 @@ export async function handleApi(request: Request, env: Env): Promise<Response> {
     if (request.method === "POST" && growthAssetMatch?.[1]) {
       const id = decodeURIComponent(growthAssetMatch[1]);
       const input = growthAssetActionSchema.parse(await parseBody(request));
-      const status = input.action === "approve" ? "ready_to_publish" : input.action === "reject" ? "rejected" : "published";
+      const status = input.action === "approve" ? "ready_to_publish"
+        : input.action === "reject" ? "rejected"
+          : input.action === "delete" ? "deleted" : "published";
       const result = await env.DB.prepare(
         `UPDATE growth_assets SET status = ?, external_url = COALESCE(?, external_url),
           published_at = CASE WHEN ? = 'published' THEN datetime('now') ELSE published_at END, updated_at = datetime('now')
-         WHERE id = ? RETURNING id, title, status`,
-      ).bind(status, input.externalUrl ?? null, status, id).first<Record<string, unknown>>();
-      if (!result) return json({ error: "Growth asset not found" }, { status: 404 });
+         WHERE id = ? AND NOT (? = 'deleted' AND status = 'published') RETURNING id, title, status`,
+      ).bind(status, input.externalUrl ?? null, status, id, status).first<Record<string, unknown>>();
+      if (!result) {
+        const existing = await env.DB.prepare("SELECT status FROM growth_assets WHERE id = ?").bind(id).first<{ status: string }>();
+        return existing?.status === "published"
+          ? json({ error: "A published asset cannot be deleted until its external post is handled." }, { status: 409 })
+          : json({ error: "Growth asset not found" }, { status: 404 });
+      }
       await env.DB.prepare(`INSERT INTO decisions (id, decision_type, subject_type, subject_id, reasoning_summary, decision, confidence)
         VALUES (?, 'growth_asset_action', 'growth_asset', ?, ?, ?, 100)`)
         .bind(crypto.randomUUID(), id, `Founder selected ${input.action}.`, input.action).run();

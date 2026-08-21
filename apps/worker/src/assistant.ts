@@ -173,7 +173,7 @@ export async function chatWithAssistant(env: Env, message: string): Promise<{ re
     env.DB.prepare("SELECT id, title, status, summary, source_count, content_json, created_at FROM deliverables ORDER BY created_at DESC LIMIT 3").all<Record<string, unknown>>(),
     env.DB.prepare("SELECT summary, content_json, created_at FROM reports ORDER BY created_at DESC LIMIT 1").first<Record<string, unknown>>(),
     env.DB.prepare("SELECT id, name, objective, primary_metric, target_value, current_value, status FROM growth_goals WHERE status = 'active' LIMIT 1").first<Record<string, unknown>>(),
-    env.DB.prepare("SELECT status, COUNT(*) count FROM growth_assets GROUP BY status").all<Record<string, unknown>>(),
+    env.DB.prepare("SELECT status, COUNT(*) count FROM growth_assets WHERE status != 'deleted' GROUP BY status").all<Record<string, unknown>>(),
     env.DB.prepare("SELECT COALESCE(SUM(clicks),0) clicks, COALESCE(SUM(installs),0) installs, COALESCE(SUM(leads),0) leads, COALESCE(SUM(revenue_inr),0) revenue_inr FROM growth_metrics").first<Record<string, unknown>>(),
   ]);
   const activeJobs = jobs.results;
@@ -197,7 +197,7 @@ export async function chatWithAssistant(env: Env, message: string): Promise<{ re
     const totalAssets = growthAssets.results.reduce((sum, item) => sum + Number(item.count ?? 0), 0);
     const ready = growthAssets.results.find((item) => item.status === "ready_to_publish");
     decision = growthGoal ? {
-      reply: `Active growth goal “${String(growthGoal.name)}” hai. ${totalAssets} content assets created hain; ${Number(ready?.count ?? 0)} ready to publish. Recorded outcome: ${Number(growthTotals?.clicks ?? 0)} clicks, ${Number(growthTotals?.installs ?? 0)} installs, ${Number(growthTotals?.leads ?? 0)} leads aur ₹${Number(growthTotals?.revenue_inr ?? 0)} revenue. Growth page par drafts approve, copy/publish aur metrics record kar sakte hain.`,
+      reply: `Active growth goal “${String(growthGoal.name)}” hai. ${totalAssets} content plans created hain; ${Number(ready?.count ?? 0)} copy-approved aur media production ka wait kar rahe hain. Abhi generated images/videos ya connected publishing analytics nahi hain. Recorded outcome: ${Number(growthTotals?.clicks ?? 0)} clicks, ${Number(growthTotals?.installs ?? 0)} installs, ${Number(growthTotals?.leads ?? 0)} leads aur ₹${Number(growthTotals?.revenue_inr ?? 0)} revenue.`,
       action: null,
     } : { reply: "Growth Engine abhi initialize nahi hua. Founder confirmation ke baad ClothMatics growth pack create kiya ja sakta hai.", action: null };
   }
