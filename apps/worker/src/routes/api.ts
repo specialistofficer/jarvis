@@ -50,6 +50,10 @@ const growthMetricSchema = z.object({
   notes: z.string().trim().max(1000).optional(),
 });
 
+const mediaActionSchema = z.object({
+  action: z.enum(["approve", "reject", "delete", "retry"]),
+});
+
 function json(data: unknown, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json; charset=utf-8");
@@ -283,6 +287,13 @@ export async function handleApi(request: Request, env: Env): Promise<Response> {
       await env.DB.prepare(`INSERT INTO decisions (id, decision_type, subject_type, subject_id, reasoning_summary, decision, confidence)
         VALUES (?, 'growth_asset_action', 'growth_asset', ?, ?, ?, 100)`)
         .bind(crypto.randomUUID(), id, `Founder selected ${input.action}.`, input.action).run();
+      if (input.action === "approve") {
+        await env.DB.prepare(`INSERT INTO jobs (id, type, priority, payload, status, scheduled_at, max_attempts)
+          SELECT ?, 'media_production', 90, ?, 'queued', datetime('now'), 3
+          WHERE NOT EXISTS (SELECT 1 FROM media_assets WHERE growth_asset_id = ? AND status != 'deleted')
+            AND NOT EXISTS (SELECT 1 FROM jobs WHERE type = 'media_production' AND status IN ('queued','running','deferred') AND json_extract(payload, '$.growthAssetId') = ?)`)
+          .bind(crypto.randomUUID(), JSON.stringify({ growthAssetId: id, reason: "copy_approved" }), id, id).run();
+      }
       return json({ ok: true, asset: result });
     }
     if (request.method === "POST" && path === "/api/growth/metrics") {
@@ -303,6 +314,46 @@ export async function handleApi(request: Request, env: Env): Promise<Response> {
       const input = growthStartSchema.parse(await parseBody(request));
       const jobId = await enqueueJob(env.DB, "growth_review", { goalId: input.goalId, reason: "founder_growth_review" }, 95);
       return json({ ok: true, jobId, message: "Growth performance review queued." }, { status: 201 });
+    }
+    if (request.method === "GET" && path === "/api/media/overview") {
+      const [assets, connections, counts] = await Promise.all([
+        env.DB.prepare(`SELECT m.*, g.title AS growth_title, g.channel, g.hook, g.cta
+          FROM media_assets m JOIN growth_assets g ON g.id = m.growth_asset_id
+          WHERE m.status != 'deleted' ORDER BY m.created_at DESC LIMIT 80`).all<Record<string, unknown>>(),
+        env.DB.prepare("SELECT * FROM channel_connections ORDER BY connection_type, provider").all<Record<string, unknown>>(),
+        env.DB.prepare("SELECT status, COUNT(*) count FROM media_assets WHERE status != 'deleted' GROUP BY status").all<Record<string, unknown>>(),
+      ]);
+      return json({
+        assets: assets.results.map((asset) => ({ ...asset, publicUrl: asset.storage_key ? `${new URL(request.url).origin}/media/${asset.public_id}` : null })),
+        connections: connections.results, counts: counts.results,
+        renderer: { name: "Jarvis GitHub FFmpeg renderer", cadence: "On push, manual dispatch, and every 15 minutes", maxAttempts: 3 },
+        storage: { provider: "Cloudflare R2", bucket: "jarvis-media", freeGuardGb: 8, existingClothmaticsBucketUsed: false },
+      });
+    }
+    const mediaProduceMatch = path.match(/^\/api\/media\/growth-assets\/([^/]+)\/produce$/);
+    if (request.method === "POST" && mediaProduceMatch?.[1]) {
+      const growthAssetId = decodeURIComponent(mediaProduceMatch[1]);
+      const asset = await env.DB.prepare("SELECT id FROM growth_assets WHERE id = ? AND status = 'ready_to_publish'").bind(growthAssetId).first();
+      if (!asset) return json({ error: "Approved content plan not found" }, { status: 404 });
+      const jobId = await enqueueJob(env.DB, "media_production", { growthAssetId, reason: "founder_media_studio" }, 95);
+      return json({ ok: true, jobId, message: "Media production queued." }, { status: 201 });
+    }
+    const mediaActionMatch = path.match(/^\/api\/media\/assets\/([^/]+)\/action$/);
+    if (request.method === "POST" && mediaActionMatch?.[1]) {
+      const id = decodeURIComponent(mediaActionMatch[1]); const input = mediaActionSchema.parse(await parseBody(request));
+      if (input.action === "retry") {
+        const updated = await env.DB.prepare("UPDATE media_assets SET status = 'render_queued', render_attempts = 0, lease_until = NULL, last_error = NULL, updated_at = datetime('now') WHERE id = ? AND status = 'failed' RETURNING id").bind(id).first();
+        if (!updated) return json({ error: "Only a failed media render can be retried" }, { status: 409 });
+      } else {
+        const status = input.action === "approve" ? "approved" : input.action === "reject" ? "rejected" : "deleted";
+        const updated = await env.DB.prepare(`UPDATE media_assets SET status = ?, approved_at = CASE WHEN ? = 'approved' THEN datetime('now') ELSE approved_at END,
+          updated_at = datetime('now') WHERE id = ? AND status NOT IN ('published','deleted') RETURNING id`).bind(status, status, id).first();
+        if (!updated) return json({ error: "Media asset cannot be changed from its current status" }, { status: 409 });
+      }
+      await env.DB.prepare(`INSERT INTO decisions (id, decision_type, subject_type, subject_id, reasoning_summary, decision, confidence)
+        VALUES (?, 'media_asset_action', 'media_asset', ?, ?, ?, 100)`)
+        .bind(crypto.randomUUID(), id, `Founder selected ${input.action}.`, input.action).run();
+      return json({ ok: true });
     }
 
     const actionMatch = path.match(/^\/api\/opportunities\/([^/]+)\/action$/);

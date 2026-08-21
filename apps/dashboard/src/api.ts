@@ -80,6 +80,18 @@ export interface GrowthOverview {
   goal: GrowthGoal | null; assets: GrowthAsset[]; leads: GrowthLead[]; metrics: GrowthMetric[]; reviews: GrowthReview[];
   experiments: Array<Record<string, unknown>>; totals: { impressions?: number; views?: number; clicks?: number; installs?: number; leads?: number; revenue_inr?: number };
 }
+export interface MediaAsset {
+  id: string; growth_asset_id: string; media_kind: "image" | "video"; format: string; width: number; height: number;
+  duration_seconds: number | null; provider: string; model: string | null; prompt: string; spec_json: string; status: string;
+  public_id: string; publicUrl: string | null; bytes: number; render_attempts: number; last_error: string | null;
+  growth_title: string; channel: string; hook: string; cta: string; created_at: string; completed_at: string | null;
+}
+export interface ChannelConnection { id: string; provider: string; connection_type: string; capabilities_json: string; status: string; account_label: string | null; last_sync_at: string | null; last_error: string | null; }
+export interface MediaOverview {
+  assets: MediaAsset[]; connections: ChannelConnection[]; counts: Array<{ status: string; count: number }>;
+  renderer: { name: string; cadence: string; maxAttempts: number };
+  storage: { provider: string; bucket: string; freeGuardGb: number; existingClothmaticsBucketUsed: boolean };
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = sessionStorage.getItem("jarvis_founder_token");
@@ -126,6 +138,13 @@ export const api = {
   deliverables: () => request<{ deliverables: DeliverableRecord[] }>("/api/deliverables"),
   reports: () => request<{ reports: ReportRecord[] }>("/api/reports"),
   growthOverview: () => request<GrowthOverview>("/api/growth/overview"),
+  mediaOverview: () => request<MediaOverview>("/api/media/overview"),
+  produceMedia: (growthAssetId: string) => request<{ ok: true; jobId: string; message: string }>(
+    `/api/media/growth-assets/${encodeURIComponent(growthAssetId)}/produce`, { method: "POST" },
+  ),
+  mediaAssetAction: (id: string, action: "approve" | "reject" | "delete" | "retry") => request<{ ok: true }>(
+    `/api/media/assets/${encodeURIComponent(id)}/action`, { method: "POST", body: JSON.stringify({ action }) },
+  ),
   startGrowth: (goalId = "goal_clothmatics_growth_v1") => request<{ ok: true; jobId: string; message: string }>(
     "/api/growth/start", { method: "POST", body: JSON.stringify({ goalId }) },
   ),

@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { runHeartbeat } from "./jobs/runner";
 import { handleApi } from "./routes/api";
 import { verifySessionToken } from "./auth";
+import { handleMediaPublicRoute } from "./mediaRoutes";
 
 function applyCors(response: Response, request: Request, env: Env): Response {
   const origin = request.headers.get("origin");
@@ -19,6 +20,8 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method === "OPTIONS") return applyCors(new Response(null, { status: 204 }), request, env);
     const path = new URL(request.url).pathname;
+    const mediaResponse = await handleMediaPublicRoute(request, env);
+    if (mediaResponse) return applyCors(mediaResponse, request, env);
     const isPublic = path === "/api/health" || path === "/api/auth/login";
     if (env.ENVIRONMENT === "production" && !isPublic) {
       const authorization = request.headers.get("authorization") ?? "";

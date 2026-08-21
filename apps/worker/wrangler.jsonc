@@ -7,6 +7,7 @@
   "vars": {
     "ENVIRONMENT": "development",
     "NVIDIA_MODEL": "meta/llama-3.1-8b-instruct",
+    "NVIDIA_IMAGE_MODEL": "stabilityai/stable-diffusion-xl",
     "NVIDIA_FREE_ALLOWANCE_REMAINING": "false",
     "DEV_MOCK_AI": "false",
     "DASHBOARD_ORIGIN": "http://localhost:5173"
@@ -20,6 +21,9 @@
       "migrations_dir": "../../migrations"
     }
   ],
+  "r2_buckets": [
+    { "binding": "MEDIA", "bucket_name": "jarvis-media" }
+  ],
   "triggers": { "crons": ["0 * * * *"] },
   "env": {
     "production": {
@@ -27,6 +31,7 @@
       "vars": {
         "ENVIRONMENT": "production",
         "NVIDIA_MODEL": "meta/llama-3.1-8b-instruct",
+        "NVIDIA_IMAGE_MODEL": "stabilityai/stable-diffusion-xl",
         "NVIDIA_FREE_ALLOWANCE_REMAINING": "true",
         "DEV_MOCK_AI": "false",
         "DASHBOARD_ORIGIN": "https://jarvis-founder-hq.pages.dev"
@@ -38,6 +43,9 @@
           "database_id": "cbe8c557-60f7-4378-8757-14a4bb7da95f",
           "migrations_dir": "../../migrations"
         }
+      ],
+      "r2_buckets": [
+        { "binding": "MEDIA", "bucket_name": "jarvis-media" }
       ],
       "triggers": { "crons": ["0 * * * *"] }
     }

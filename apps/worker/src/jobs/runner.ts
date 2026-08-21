@@ -6,6 +6,7 @@ import { runLearningReview } from "./learning";
 import { generateDailyReport } from "./report";
 import { runResearchBrief } from "./research";
 import { runGrowthPlan, runGrowthReview } from "./growth";
+import { runMediaProduction } from "./media";
 
 interface JobRow {
   id: string;
@@ -84,6 +85,9 @@ async function executeAcquiredJob(env: Env, job: JobRow): Promise<void> {
     } else if (job.type === "growth_review") {
       const result = await runGrowthReview(env, payload);
       resultSummary = result.summary;
+    } else if (job.type === "media_production") {
+      const result = await runMediaProduction(env, payload);
+      resultSummary = `Prepared ${result.kind} media ${result.mediaId}: ${result.status} via ${result.provider}.`;
     }
     else throw new Error(`Unknown job type: ${job.type}`);
 
