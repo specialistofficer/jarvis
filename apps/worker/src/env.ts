@@ -17,4 +17,8 @@ export interface Env {
   GOOGLE_CLIENT_SECRET?: string;
   META_CLIENT_ID?: string;
   META_CLIENT_SECRET?: string;
+  LINKEDIN_CLIENT_ID?: string;
+  LINKEDIN_CLIENT_SECRET?: string;
+  X_CLIENT_ID?: string;
+  X_CLIENT_SECRET?: string;
 }

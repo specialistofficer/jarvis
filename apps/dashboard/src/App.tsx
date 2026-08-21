@@ -235,6 +235,28 @@ function DiagnosticView({ overview, onStatus, today }: any) {
           } catch (err) { alert("Error initiating OAuth"); }
         }}>Connect</button>
       </div>
+
+      <div className="list-item flex-between">
+        <div><strong>LinkedIn</strong><p style={{fontSize: 12, color: 'var(--text-muted)'}}>Professional Network</p></div>
+        <button onClick={async () => {
+          try {
+            const res = await fetch(API_BASE + "/api/connections/linkedin/auth", { headers: { "Authorization": "Bearer " + sessionStorage.getItem("jarvis_founder_token") } });
+            const data = await res.json();
+            if (data.url) window.location.href = data.url; else alert(data.error || "Failed to get auth URL");
+          } catch (err) { alert("Error initiating OAuth"); }
+        }}>Connect</button>
+      </div>
+
+      <div className="list-item flex-between">
+        <div><strong>X (Twitter)</strong><p style={{fontSize: 12, color: 'var(--text-muted)'}}>X API v2</p></div>
+        <button onClick={async () => {
+          try {
+            const res = await fetch(API_BASE + "/api/connections/x/auth", { headers: { "Authorization": "Bearer " + sessionStorage.getItem("jarvis_founder_token") } });
+            const data = await res.json();
+            if (data.url) window.location.href = data.url; else alert(data.error || "Failed to get auth URL");
+          } catch (err) { alert("Error initiating OAuth"); }
+        }}>Connect</button>
+      </div>
       
     </div>
     <div className="panel">
