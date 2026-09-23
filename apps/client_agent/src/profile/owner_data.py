@@ -60,6 +60,7 @@ PORTFOLIO_ITEMS: List[PortfolioItemSchema] = [
         name="ClothMatics - AI Wardrobe & Fashion Platform",
         slug="clothmatics-ai",
         type="mobile_app",
+        play_store_url="https://play.google.com/store/apps/details?id=com.clothmatics.app",
         technologies=["React Native", "Android", "TypeScript", "Firebase", "Cloudflare Workers", "Gemini API", "AI Integration"],
         features=[
             "Production Android application published on Google Play",

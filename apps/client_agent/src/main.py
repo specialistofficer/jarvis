@@ -406,4 +406,53 @@ async def reject_application_endpoint(
     return {"ok": True, "application_id": application.id, "status": application.status}
 
 
+from src.execution.controller import ExecutionModeController
+from src.execution.packager import ApplicationPackager
+from src.models.schemas import SubmissionPackageSchema
+
+execution_controller = ExecutionModeController()
+application_packager = ApplicationPackager()
+
+
+@app.post("/api/applications/{application_id}/submit")
+async def submit_application_endpoint(
+    application_id: str,
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Execute application submission or generate 1-click manual package."""
+    try:
+        return await execution_controller.execute_submission(application_id, session=session)
+    except PermissionError as pe:
+        raise HTTPException(status_code=403, detail=str(pe))
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+
+
+@app.get("/api/applications/{application_id}/package", response_model=SubmissionPackageSchema)
+async def get_application_package_endpoint(
+    application_id: str,
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Retrieve 1-click submission package with verified proposal and portfolio links."""
+    app_stmt = (
+        select(ApplicationModel)
+        .options(
+            selectinload(ApplicationModel.opportunity),
+            selectinload(ApplicationModel.proposals),
+        )
+        .where(ApplicationModel.id == application_id)
+        .limit(1)
+    )
+    app_res = await session.execute(app_stmt)
+    application = app_res.scalars().first()
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    try:
+        return application_packager.build_package(application)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+
+
+
 

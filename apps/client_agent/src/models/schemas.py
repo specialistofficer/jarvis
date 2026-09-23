@@ -105,3 +105,20 @@ class FactualVerificationReport(BaseModel):
     unlisted_technologies: List[str] = Field(default_factory=list)
     suspicious_metrics: List[str] = Field(default_factory=list)
     verdict_notes: str
+
+
+class SubmissionPackageSchema(BaseModel):
+    application_id: str
+    opportunity_id: str
+    source: str
+    title: str
+    submission_url: str
+    proposed_price: Optional[float] = None
+    currency: str = "USD"
+    cover_letter: str
+    strategy: str
+    portfolio_links: List[Dict[str, str]] = Field(default_factory=list)
+    instructions: str
+    mode: Literal["MANUAL", "APPROVAL_REQUIRED", "AUTO"]
+    status: str
+
