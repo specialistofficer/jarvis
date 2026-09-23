@@ -1,9 +1,10 @@
 """
 FastAPI application entry point for Personal AI Client Acquisition Agent.
 """
+import json
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, List
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
@@ -141,8 +142,78 @@ async def list_opportunities(
     ]
 
 
+from src.intelligence.agent import OpportunityIntelligenceAgent
+from src.models.entities import OpportunityScoreModel
+from src.models.schemas import OpportunityScoreResult
+
+intelligence_agent = OpportunityIntelligenceAgent()
+
+
+class BatchScoreRequest(BaseModel):
+    limit: int = 25
+
+
+@app.post("/api/opportunities/{opportunity_id}/score", response_model=OpportunityScoreResult)
+async def score_opportunity_endpoint(
+    opportunity_id: str,
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Trigger multi-factor scoring and economics evaluation for a specific opportunity."""
+    stmt = select(OpportunityModel).where(OpportunityModel.id == opportunity_id).limit(1)
+    res = await session.execute(stmt)
+    opp = res.scalars().first()
+    if not opp:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+
+    return await intelligence_agent.evaluate_opportunity(opp, session=session)
+
+
+@app.post("/api/opportunities/score-batch", response_model=List[OpportunityScoreResult])
+async def score_pending_opportunities_endpoint(
+    req: BatchScoreRequest = BatchScoreRequest(),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Trigger scoring on pending unscored opportunities."""
+    return await intelligence_agent.score_pending_opportunities(session=session, limit=req.limit)
+
+
+@app.get("/api/opportunities/{opportunity_id}/score")
+async def get_opportunity_score_endpoint(
+    opportunity_id: str,
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Retrieve saved evaluation and multi-factor score for an opportunity."""
+    stmt = (
+        select(OpportunityScoreModel)
+        .where(OpportunityScoreModel.opportunity_id == opportunity_id)
+        .limit(1)
+    )
+    res = await session.execute(stmt)
+    score = res.scalars().first()
+    if not score:
+        raise HTTPException(status_code=404, detail="Score not found for this opportunity")
+
+    return {
+        "id": score.id,
+        "opportunity_id": score.opportunity_id,
+        "fit_score": score.fit_score,
+        "technical_match": score.technical_match,
+        "portfolio_match": score.portfolio_match,
+        "client_quality": score.client_quality,
+        "value_score": score.value_score,
+        "competition_score": score.competition_score,
+        "risk_score": score.risk_score,
+        "recommended_action": score.recommended_action,
+        "reasoning": json.loads(score.reasoning_json),
+        "recommended_portfolio_slugs": json.loads(score.recommended_portfolio_ids_json),
+        "recommended_strategy": score.recommended_strategy,
+        "created_at": score.created_at.isoformat() if score.created_at else None,
+    }
+
+
 @app.get("/api/sources")
 async def list_sources():
     """List all registered sources with capability definitions."""
     return [adapter.capability.model_dump() for adapter in discovery_agent._adapters.values()]
+
 

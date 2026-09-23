@@ -61,6 +61,21 @@ class OpportunityCreateSchema(BaseModel):
     application_cost: float = 0.0
 
 
+class EconomicsEvaluationSchema(BaseModel):
+    application_cost_usd: float = Field(ge=0)
+    application_cost_inr: float = Field(ge=0)
+    estimated_gross_budget: float = Field(ge=0)
+    platform_fee_rate: float = Field(ge=0, le=1.0)
+    estimated_net_revenue: float = Field(ge=0)
+    estimated_win_probability: float = Field(ge=0, le=1.0)
+    expected_monetary_value: float
+    risk_discount: float = Field(ge=0, le=1.0)
+    is_spend_permitted: bool
+    roi_ratio: float
+    recommendation: Literal["APPLY", "REVIEW", "SKIP"]
+    reasons: List[str] = Field(default_factory=list)
+
+
 class OpportunityScoreResult(BaseModel):
     fit_score: float = Field(ge=0, le=100)
     technical_match: float = Field(ge=0, le=100)
@@ -74,6 +89,7 @@ class OpportunityScoreResult(BaseModel):
     reasoning: List[str]
     recommended_portfolio_slugs: List[str]
     recommended_strategy: str
+    economics: Optional[EconomicsEvaluationSchema] = None
 
 
 class ProposalDraftSchema(BaseModel):

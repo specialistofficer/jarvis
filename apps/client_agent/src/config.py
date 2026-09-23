@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     # Safety & Spend Control
     ALLOW_PAID_SPEND: bool = False
     MAX_COST_INR: float = 0.0
+    USD_TO_INR_RATE: float = 85.0
     DEFAULT_APPLICATION_MODE: Literal["MANUAL", "APPROVAL_REQUIRED", "AUTO"] = "APPROVAL_REQUIRED"
     DAILY_APPLICATION_LIMIT: int = 10
     AUTO_APPLY_ENABLED: bool = False
