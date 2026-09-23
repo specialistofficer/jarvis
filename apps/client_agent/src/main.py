@@ -217,3 +217,103 @@ async def list_sources():
     return [adapter.capability.model_dump() for adapter in discovery_agent._adapters.values()]
 
 
+from sqlalchemy.orm import selectinload
+from src.proposals.agent import ProposalGenerationAgent
+from src.proposals.validator import FactualVerificationGuard
+from src.models.entities import ApplicationModel, ProposalModel
+from src.models.schemas import FactualVerificationReport
+
+proposal_agent = ProposalGenerationAgent()
+factual_guard = FactualVerificationGuard()
+
+
+class ProposalGenerateRequest(BaseModel):
+    strategy: Optional[str] = None
+    proposed_price: Optional[float] = None
+
+
+class VerifyProposalRequest(BaseModel):
+    text: str
+
+
+@app.post("/api/opportunities/{opportunity_id}/propose")
+async def generate_proposal_endpoint(
+    opportunity_id: str,
+    req: ProposalGenerateRequest = ProposalGenerateRequest(),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Generate, factually verify, and record a customized proposal for an opportunity."""
+    try:
+        proposal, verification = await proposal_agent.generate_proposal(
+            opportunity_id=opportunity_id,
+            session=session,
+            custom_strategy=req.strategy,
+            custom_price=req.proposed_price,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return {
+        "proposal_id": proposal.id,
+        "application_id": proposal.application_id,
+        "strategy": proposal.strategy,
+        "cover_letter": proposal.cover_letter,
+        "is_factually_verified": proposal.is_factually_verified,
+        "verification_report": json.loads(proposal.verification_report_json),
+        "created_at": proposal.created_at.isoformat() if proposal.created_at else None,
+    }
+
+
+@app.post("/api/proposals/verify", response_model=FactualVerificationReport)
+async def verify_proposal_text_endpoint(req: VerifyProposalRequest):
+    """Directly audit a proposal draft against the Zero Factual Invention policy."""
+    return factual_guard.verify_proposal(req.text)
+
+
+@app.get("/api/applications")
+async def list_applications(
+    status: Optional[str] = None,
+    limit: int = 50,
+    session: AsyncSession = Depends(get_db_session),
+):
+    """List applications along with their proposals and opportunity details."""
+    stmt = (
+        select(ApplicationModel)
+        .options(
+            selectinload(ApplicationModel.proposals),
+            selectinload(ApplicationModel.opportunity),
+        )
+        .order_by(ApplicationModel.created_at.desc())
+        .limit(limit)
+    )
+    if status:
+        stmt = stmt.where(ApplicationModel.status == status)
+
+    res = await session.execute(stmt)
+    apps = res.scalars().all()
+
+    results = []
+    for a in apps:
+        latest_proposal = a.proposals[-1] if a.proposals else None
+        results.append({
+            "id": a.id,
+            "opportunity_id": a.opportunity_id,
+            "opportunity_title": a.opportunity.title if a.opportunity else None,
+            "opportunity_source": a.opportunity.source if a.opportunity else None,
+            "status": a.status,
+            "mode": a.mode,
+            "proposed_price": a.proposed_price,
+            "submission_url": a.submission_url,
+            "latest_proposal": {
+                "id": latest_proposal.id,
+                "strategy": latest_proposal.strategy,
+                "is_factually_verified": latest_proposal.is_factually_verified,
+                "cover_letter": latest_proposal.cover_letter,
+                "created_at": latest_proposal.created_at.isoformat() if latest_proposal.created_at else None,
+            } if latest_proposal else None,
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        })
+    return results
+
+
+
