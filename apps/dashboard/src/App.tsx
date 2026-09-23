@@ -2,10 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { OpportunityAction, OpportunityRecord, TodaySummary } from "@jarvis/types";
 import { api, ApiError, API_BASE } from "./api";
 import type { AssistantMessage, AssistantProposal, DeliverableRecord, GrowthAsset, GrowthOverview, MediaAsset, MediaOverview, ReportRecord, SystemOverview } from "./api";
+import { ClientAcquisitionView } from "./ClientAcquisitionView";
 
-type View = "Research" | "Media" | "Leads" | "Published" | "Analytics" | "Jarvis" | "Diagnostic" | "Settings";
+type View = "ClientAcquisition" | "Research" | "Media" | "Leads" | "Published" | "Analytics" | "Jarvis" | "Diagnostic" | "Settings";
 
 const nav: Array<{ view: View; icon: string; label: string }> = [
+  { view: "ClientAcquisition", icon: "💼", label: "Client Acquisition" },
   { view: "Research", icon: "▤", label: "Research" },
   { view: "Media", icon: "▣", label: "Media" },
   { view: "Leads", icon: "🎯", label: "Leads" },
@@ -303,7 +305,7 @@ function DiagnosticView({ overview, onStatus, today }: any) {
 }
 
 export function App() {
-  const [view, setView] = useState<View>("Research");
+  const [view, setView] = useState<View>("ClientAcquisition");
   const [today, setToday] = useState<TodaySummary | null>(null);
   const [opportunities, setOpportunities] = useState<OpportunityRecord[]>([]);
   const [overview, setOverview] = useState<SystemOverview | null>(null);
@@ -406,7 +408,8 @@ const [proposal, setProposal] = useState<AssistantProposal | null>(null);
         </div>
       </aside>
       <main>
-        <header><h1>{view}</h1></header>
+        <header><h1>{view === "ClientAcquisition" ? "Client Acquisition HQ" : view}</h1></header>
+        {view === "ClientAcquisition" && <ClientAcquisitionView />}
         {view === "Research" && <ResearchView deliverables={deliverables} reports={reports} messages={messages} busy={busy} onResearch={onResearch} onSend={sendMessage} />}
         {view === "Media" && <MediaView growth={growth} media={media} busy={busy} onGenerate={onGenerateGrowth} onScoutTrends={onScoutTrends} onAssetAction={onGrowthAssetAction} onProduce={onProduceMedia} onMediaAction={onMediaAction} />}
         {view === "Leads" && <LeadsView outreach={outreach} busy={busy} onTriggerOutreach={onTriggerOutreach} />}

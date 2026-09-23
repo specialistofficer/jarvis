@@ -179,3 +179,150 @@ export const api = {
     { method: "POST", body: JSON.stringify({ rule, scope: "global", priority: 50 }) },
   ),
 };
+
+const configuredClientAgentBase = (import.meta.env.VITE_CLIENT_AGENT_URL as string | undefined)?.replace(/\/$/, "");
+export const CLIENT_AGENT_BASE = configuredClientAgentBase || "http://localhost:8000";
+
+async function requestClientAgent<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${CLIENT_AGENT_BASE}${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...init?.headers },
+  });
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new ApiError(`Client Agent API error (${response.status}): ${errorText}`, response.status);
+  }
+  return response.json() as Promise<T>;
+}
+
+export interface ClientOpportunity {
+  id: string;
+  fingerprint: string;
+  source: string;
+  title: string;
+  description: string;
+  url: string;
+  client_name?: string;
+  budget_min?: number;
+  budget_max?: number;
+  currency: string;
+  required_skills: string[];
+  status: string;
+  created_at?: string;
+  scores?: Array<{
+    fit_score: number;
+    technical_match: number;
+    portfolio_match: number;
+    recommended_action: string;
+  }>;
+}
+
+export interface ClientApplication {
+  id: string;
+  opportunity_id: string;
+  status: string;
+  mode: string;
+  proposed_price?: number;
+  submission_url?: string;
+  opportunity?: {
+    title: string;
+    source: string;
+  };
+  proposals?: Array<{
+    cover_letter: string;
+    strategy: string;
+    is_factually_verified: boolean;
+  }>;
+  messages?: Array<{
+    id: string;
+    sender: string;
+    text: string;
+    intent?: string;
+    suggested_reply?: string;
+  }>;
+}
+
+export interface FunnelStage {
+  stage: string;
+  count: number;
+  conversion_from_previous: number;
+  dropoff_rate: number;
+}
+
+export interface FunnelReport {
+  total_discovered: number;
+  qualified: number;
+  applied: number;
+  replied: number;
+  interview: number;
+  won: number;
+  stages: FunnelStage[];
+  overall_conversion_rate: number;
+}
+
+export interface RoiReport {
+  total_spend_usd: number;
+  total_spend_inr: number;
+  pipeline_value_usd: number;
+  won_revenue_usd: number;
+  net_profit_usd: number;
+  overall_roi_percent: number;
+  platform_breakdown: Array<{
+    source_id: string;
+    opportunities_count: number;
+    applications_count: number;
+    replies_count: number;
+    wins_count: number;
+    won_revenue_usd: number;
+    win_rate: number;
+    roi_percent: number;
+  }>;
+  tech_breakdown: Array<{
+    tech: string;
+    opportunities_count: number;
+    applications_count: number;
+    wins_count: number;
+    win_rate: number;
+    revenue_usd: number;
+  }>;
+}
+
+export interface StrategyReport {
+  active_experiments: Array<{
+    experiment_id: string;
+    name: string;
+    dimension: string;
+    winning_variant?: string;
+    confidence_level: number;
+    recommendation: string;
+    variants: Array<{
+      name: string;
+      applications_count: number;
+      replies_count: number;
+      wins_count: number;
+      win_rate: number;
+    }>;
+  }>;
+  top_performing_sources: string[];
+  underperforming_sources: string[];
+  top_performing_tech_tags: string[];
+  strategic_recommendations: string[];
+}
+
+export const clientAgent = {
+  health: () => requestClientAgent<{ ok: boolean; service: string }>("/health"),
+  profile: () => requestClientAgent<any>("/api/profile"),
+  portfolio: () => requestClientAgent<any[]>("/api/portfolio"),
+  sources: () => requestClientAgent<any[]>("/api/sources"),
+  opportunities: () => requestClientAgent<ClientOpportunity[]>("/api/opportunities"),
+  triggerDiscovery: (source?: string) => requestClientAgent<{ opportunities_scanned: number; new_opportunities_stored: number; duplicates_skipped: number }>("/api/discovery/run", { method: "POST", body: JSON.stringify(source ? { source } : {}) }),
+  scoreOpportunity: (id: string) => requestClientAgent<any>(`/api/opportunities/${encodeURIComponent(id)}/score`, { method: "POST" }),
+  generateProposal: (id: string, strategy?: string) => requestClientAgent<any>(`/api/opportunities/${encodeURIComponent(id)}/propose`, { method: "POST", body: JSON.stringify({ strategy }) }),
+  applications: () => requestClientAgent<ClientApplication[]>("/api/applications"),
+  submitApplication: (id: string) => requestClientAgent<any>(`/api/applications/${encodeURIComponent(id)}/submit`, { method: "POST" }),
+  funnel: () => requestClientAgent<FunnelReport>("/api/analytics/funnel"),
+  roi: () => requestClientAgent<RoiReport>("/api/analytics/roi"),
+  experiments: () => requestClientAgent<any[]>("/api/strategy/experiments"),
+  strategyReview: () => requestClientAgent<StrategyReport>("/api/strategy/review", { method: "POST" }),
+};
+
