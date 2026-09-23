@@ -9,3 +9,10 @@
 *.log
 .DS_Store
 coverage/
+**/.venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+*.db
+*.sqlite
+*.sqlite3
