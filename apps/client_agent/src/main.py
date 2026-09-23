@@ -454,5 +454,74 @@ async def get_application_package_endpoint(
         raise HTTPException(status_code=400, detail=str(ve))
 
 
+from src.responses.classifier import ResponseIntentClassifier
+from src.responses.drafter import ContextualResponseDrafter
+from src.models.schemas import MessageIntentResult, ResponseDraftResult
+from src.models.entities import MessageModel
+
+response_classifier = ResponseIntentClassifier()
+response_drafter = ContextualResponseDrafter()
+
+
+class ClassifyRequest(BaseModel):
+    text: str
+
+
+class DraftResponseRequest(BaseModel):
+    application_id: str
+    incoming_text: str
+
+
+@app.post("/api/responses/classify", response_model=MessageIntentResult)
+async def classify_message_endpoint(req: ClassifyRequest):
+    """Classify incoming client message intent."""
+    return response_classifier.classify(req.text)
+
+
+@app.post("/api/responses/draft", response_model=ResponseDraftResult)
+async def draft_response_endpoint(
+    req: DraftResponseRequest,
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Generate and store contextual response draft for an application."""
+    try:
+        return await response_drafter.draft_response(
+            application_id=req.application_id,
+            incoming_text=req.incoming_text,
+            session=session,
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+
+
+@app.get("/api/applications/{application_id}/messages")
+async def list_application_messages(
+    application_id: str,
+    session: AsyncSession = Depends(get_db_session),
+):
+    """List message history and response drafts for an application."""
+    stmt = (
+        select(MessageModel)
+        .where(MessageModel.application_id == application_id)
+        .order_by(MessageModel.created_at.asc())
+    )
+    res = await session.execute(stmt)
+    msgs = res.scalars().all()
+    return [
+        {
+            "id": m.id,
+            "application_id": m.application_id,
+            "sender": m.sender,
+            "text": m.text,
+            "intent": m.intent,
+            "suggested_reply": m.suggested_reply,
+            "status": m.status,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+        }
+        for m in msgs
+    ]
+
+
+
 
 

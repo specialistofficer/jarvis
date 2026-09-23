@@ -122,3 +122,19 @@ class SubmissionPackageSchema(BaseModel):
     mode: Literal["MANUAL", "APPROVAL_REQUIRED", "AUTO"]
     status: str
 
+
+class MessageIntentResult(BaseModel):
+    intent: Literal["INTERESTED", "QUESTION", "INTERVIEW", "NEGOTIATION", "REJECTION", "SPAM", "UNCLEAR"]
+    confidence: float = Field(ge=0.0, le=1.0)
+    reasoning: str
+
+
+class ResponseDraftResult(BaseModel):
+    application_id: str
+    incoming_text: str
+    intent: str
+    suggested_reply: str
+    recommended_action: str
+    notes: List[str] = Field(default_factory=list)
+
+

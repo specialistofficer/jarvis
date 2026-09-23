@@ -133,6 +133,7 @@ class ApplicationModel(Base):
 
     opportunity = relationship("OpportunityModel", back_populates="applications")
     proposals = relationship("ProposalModel", back_populates="application", cascade="all, delete-orphan")
+    messages = relationship("MessageModel", back_populates="application", cascade="all, delete-orphan")
 
 
 class ProposalModel(Base):
@@ -151,6 +152,21 @@ class ProposalModel(Base):
     application = relationship("ApplicationModel", back_populates="proposals")
 
 
+class MessageModel(Base):
+    __tablename__ = "messages"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    application_id = Column(String(36), ForeignKey("applications.id", ondelete="CASCADE"), nullable=False, index=True)
+    sender = Column(String(50), nullable=False)  # client, founder, assistant
+    text = Column(Text, nullable=False)
+    intent = Column(String(50), nullable=True)  # INTERESTED, QUESTION, INTERVIEW, NEGOTIATION, REJECTION, SPAM, UNCLEAR
+    suggested_reply = Column(Text, nullable=True)
+    status = Column(String(30), default="received", nullable=False)  # received, replied, ignored
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+
+    application = relationship("ApplicationModel", back_populates="messages")
+
+
 class AuditLogModel(Base):
     __tablename__ = "audit_logs"
 
@@ -160,3 +176,4 @@ class AuditLogModel(Base):
     entity_id = Column(String(36), nullable=False)
     details_json = Column(Text, default="{}", nullable=False)
     created_at = Column(DateTime(timezone=True), default=utc_now)
+
