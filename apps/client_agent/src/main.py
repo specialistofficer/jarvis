@@ -72,3 +72,77 @@ async def read_audit_logs(limit: int = 50, session: AsyncSession = Depends(get_d
         }
         for log in logs
     ]
+
+
+from pydantic import BaseModel
+from typing import Optional
+from sqlalchemy import select
+from src.agents.discovery import DiscoveryAgent, DiscoveryRunResult
+from src.models.entities import OpportunityModel
+
+discovery_agent = DiscoveryAgent()
+
+
+class DiscoveryRunRequest(BaseModel):
+    query: Optional[str] = None
+    sources: Optional[List[str]] = None
+    limit: int = 15
+
+
+@app.post("/api/discovery/run", response_model=DiscoveryRunResult)
+async def trigger_discovery(
+    req: DiscoveryRunRequest = DiscoveryRunRequest(),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Trigger an autonomous discovery cycle across configured sources."""
+    return await discovery_agent.run_discovery(
+        session=session,
+        query=req.query,
+        source_names=req.sources,
+        per_source_limit=req.limit,
+    )
+
+
+@app.get("/api/opportunities")
+async def list_opportunities(
+    source: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 50,
+    session: AsyncSession = Depends(get_db_session),
+):
+    """List discovered opportunities with optional filters."""
+    stmt = select(OpportunityModel).order_by(OpportunityModel.created_at.desc()).limit(limit)
+    if source:
+        stmt = stmt.where(OpportunityModel.source == source)
+    if status:
+        stmt = stmt.where(OpportunityModel.status == status)
+
+    result = await session.execute(stmt)
+    opps = result.scalars().all()
+    return [
+        {
+            "id": o.id,
+            "fingerprint": o.fingerprint,
+            "source": o.source,
+            "external_id": o.external_id,
+            "title": o.title,
+            "description": o.description,
+            "url": o.url,
+            "client_name": o.client_name,
+            "client_country": o.client_country,
+            "budget_min": o.budget_min,
+            "budget_max": o.budget_max,
+            "currency": o.currency,
+            "application_cost": o.application_cost,
+            "status": o.status,
+            "created_at": o.created_at.isoformat() if o.created_at else None,
+        }
+        for o in opps
+    ]
+
+
+@app.get("/api/sources")
+async def list_sources():
+    """List all registered sources with capability definitions."""
+    return [adapter.capability.model_dump() for adapter in discovery_agent._adapters.values()]
+
