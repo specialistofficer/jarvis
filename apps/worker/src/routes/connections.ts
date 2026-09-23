@@ -1,4 +1,4 @@
-import { Env } from "../env";
+import type { Env } from "../env";
 
 export async function handleConnectionsApi(request: Request, env: Env): Promise<Response | null> {
   const url = new URL(request.url);

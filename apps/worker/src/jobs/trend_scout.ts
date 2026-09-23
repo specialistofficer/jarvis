@@ -10,15 +10,16 @@ export async function runTrendScout(env: Env, jobId: string, payload: Record<str
   
   // Quick and dirty regex to extract titles from RSS items
   const titleRegex = /<title>([^<]+)<\/title>/g;
-  let match;
-  const titles = [];
+  let match: RegExpExecArray | null = null;
+  const titles: string[] = [];
   while ((match = titleRegex.exec(xml)) !== null) {
-    if (match[1] !== "Daily Search Trends") {
-      titles.push(match[1]);
+    const matchedTitle = match[1];
+    if (matchedTitle && matchedTitle !== "Daily Search Trends") {
+      titles.push(matchedTitle);
     }
   }
   
-  const topTopics = titles.slice(0, 3);
+  const topTopics: string[] = titles.slice(0, 3);
   if (topTopics.length === 0) throw new Error("No trending topics found");
 
   const goalId = typeof payload.goalId === "string" ? payload.goalId : "goal_agency_v1";
@@ -53,11 +54,14 @@ Ensure exactly 3 videos (15, 30, 60 seconds). Return ONLY valid JSON without mar
   const runId = crypto.randomUUID();
   await env.DB.prepare(`INSERT INTO agent_runs (id, role, job_id, provider, model, prompt_version, input_summary, started_at)
     VALUES (?, 'trend_scout', ?, ?, ?, 'TREND_SCOUT_V1', ?, ?)`)
-    .bind(runId, jobId, provider.name, provider.model, `Trending topics: ${topTopics.join(", ")}`, new Date().toISOString()).run();
+    .bind(runId, jobId, provider.name, env.NVIDIA_MODEL, `Trending topics: ${topTopics.join(", ")}`, new Date().toISOString()).run();
 
   let generatedText = "";
   try {
-    generatedText = await provider.generateText(prompt);
+    generatedText = await provider.generateText(
+      "You are a viral video strategist. Return ONLY valid JSON matching the requested schema without markdown wrapping.",
+      prompt
+    );
     if (generatedText.startsWith("\`\`\`json")) {
       generatedText = generatedText.replace(/\`\`\`json/g, "").replace(/\`\`\`/g, "").trim();
     } else if (generatedText.startsWith("\`\`\`")) {
