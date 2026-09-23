@@ -12,7 +12,7 @@ from src.database import init_db, get_db_session
 from src.profile.service import seed_profile_and_portfolio, get_owner_profile
 from src.profile.owner_data import PORTFOLIO_ITEMS
 from src.models.schemas import OwnerProfileSchema, PortfolioItemSchema
-from src.audit.logger import fetch_audit_logs
+from src.audit.logger import fetch_audit_logs, record_audit_event
 from src.ai.provider import get_ai_provider
 
 
@@ -314,6 +314,96 @@ async def list_applications(
             "created_at": a.created_at.isoformat() if a.created_at else None,
         })
     return results
+
+
+from src.interfaces.telegram_bot import TelegramBotService
+
+telegram_service = TelegramBotService()
+
+
+@app.post("/api/notifications/telegram/alert/{opportunity_id}")
+async def trigger_telegram_alert(
+    opportunity_id: str,
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Send interactive Telegram notification for an opportunity."""
+    opp_stmt = select(OpportunityModel).where(OpportunityModel.id == opportunity_id).limit(1)
+    opp_res = await session.execute(opp_stmt)
+    opp = opp_res.scalars().first()
+    if not opp:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+
+    score_stmt = select(OpportunityScoreModel).where(OpportunityScoreModel.opportunity_id == opportunity_id).limit(1)
+    score_res = await session.execute(score_stmt)
+    score = score_res.scalars().first()
+
+    app_stmt = select(ApplicationModel).where(ApplicationModel.opportunity_id == opportunity_id).limit(1)
+    app_res = await session.execute(app_stmt)
+    application = app_res.scalars().first()
+
+    res = await telegram_service.send_opportunity_alert(
+        opp=opp,
+        score=score,
+        application=application,
+    )
+    return res
+
+
+@app.post("/api/notifications/telegram/webhook")
+async def telegram_webhook_endpoint(
+    update: Dict[str, Any],
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Handle incoming Telegram webhook updates (callback queries, commands)."""
+    return await telegram_service.process_update(update=update, session=session)
+
+
+@app.post("/api/applications/{application_id}/approve")
+async def approve_application_endpoint(
+    application_id: str,
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Approve an application for submission."""
+    app_stmt = select(ApplicationModel).where(ApplicationModel.id == application_id).limit(1)
+    app_res = await session.execute(app_stmt)
+    application = app_res.scalars().first()
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    application.status = "approved"
+    await record_audit_event(
+        session=session,
+        event_type="proposal_approved",
+        entity_type="application",
+        entity_id=application.id,
+        details={"approved_by": "founder_api"},
+    )
+    await session.commit()
+    return {"ok": True, "application_id": application.id, "status": application.status}
+
+
+@app.post("/api/applications/{application_id}/reject")
+async def reject_application_endpoint(
+    application_id: str,
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Reject an application."""
+    app_stmt = select(ApplicationModel).where(ApplicationModel.id == application_id).limit(1)
+    app_res = await session.execute(app_stmt)
+    application = app_res.scalars().first()
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    application.status = "rejected"
+    await record_audit_event(
+        session=session,
+        event_type="application_rejected",
+        entity_type="application",
+        entity_id=application.id,
+        details={"rejected_by": "founder_api"},
+    )
+    await session.commit()
+    return {"ok": True, "application_id": application.id, "status": application.status}
 
 
 
