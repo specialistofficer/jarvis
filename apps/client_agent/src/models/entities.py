@@ -126,6 +126,7 @@ class ApplicationModel(Base):
     status = Column(String(50), default="draft", nullable=False, index=True)  # draft, pending_approval, approved, submitted, won, lost
     mode = Column(String(30), default="APPROVAL_REQUIRED", nullable=False)
     proposed_price = Column(Float, nullable=True)
+    actual_revenue = Column(Float, nullable=True)
     submission_url = Column(String(500), nullable=True)
     submitted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now)

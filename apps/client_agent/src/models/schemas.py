@@ -138,3 +138,92 @@ class ResponseDraftResult(BaseModel):
     notes: List[str] = Field(default_factory=list)
 
 
+class FunnelStageCount(BaseModel):
+    stage: str
+    count: int
+    conversion_from_previous: float
+    dropoff_rate: float
+
+
+class ConversionFunnelReport(BaseModel):
+    total_discovered: int
+    qualified: int
+    applied: int
+    replied: int
+    interview: int
+    won: int
+    stages: List[FunnelStageCount]
+    overall_conversion_rate: float
+
+
+class PlatformMetrics(BaseModel):
+    source_id: str
+    opportunities_count: int
+    applications_count: int
+    replies_count: int
+    wins_count: int
+    total_cost_usd: float
+    total_cost_inr: float
+    pipeline_value_usd: float
+    won_revenue_usd: float
+    win_rate: float
+    roi_percent: float
+
+
+class TechStackMetrics(BaseModel):
+    tech: str
+    opportunities_count: int
+    applications_count: int
+    wins_count: int
+    win_rate: float
+    revenue_usd: float
+
+
+class PricingTierMetrics(BaseModel):
+    tier: str
+    opportunities_count: int
+    applications_count: int
+    wins_count: int
+    revenue_usd: float
+
+
+class AnalyticsROIReport(BaseModel):
+    total_spend_usd: float
+    total_spend_inr: float
+    pipeline_value_usd: float
+    won_revenue_usd: float
+    net_profit_usd: float
+    overall_roi_percent: float
+    platform_breakdown: List[PlatformMetrics]
+    tech_breakdown: List[TechStackMetrics]
+    pricing_tier_breakdown: List[PricingTierMetrics]
+
+
+class ExperimentVariant(BaseModel):
+    name: str
+    applications_count: int
+    replies_count: int
+    wins_count: int
+    reply_rate: float
+    win_rate: float
+
+
+class ExperimentReport(BaseModel):
+    experiment_id: str
+    name: str
+    dimension: str
+    variants: List[ExperimentVariant]
+    winning_variant: Optional[str] = None
+    confidence_level: float
+    recommendation: str
+
+
+class StrategyReviewReport(BaseModel):
+    active_experiments: List[ExperimentReport]
+    top_performing_sources: List[str]
+    underperforming_sources: List[str]
+    top_performing_tech_tags: List[str]
+    strategic_recommendations: List[str]
+
+
+

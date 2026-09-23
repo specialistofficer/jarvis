@@ -522,6 +522,43 @@ async def list_application_messages(
     ]
 
 
+from src.analytics.funnel import calculate_funnel
+from src.analytics.roi import calculate_roi
+from src.strategy.experiments import evaluate_proposal_style_experiment, generate_strategy_review
+from src.models.schemas import (
+    ConversionFunnelReport,
+    AnalyticsROIReport,
+    ExperimentReport,
+    StrategyReviewReport,
+)
+
+
+@app.get("/api/analytics/funnel", response_model=ConversionFunnelReport)
+async def get_funnel_endpoint(session: AsyncSession = Depends(get_db_session)):
+    """Retrieve full client acquisition conversion funnel."""
+    return await calculate_funnel(session)
+
+
+@app.get("/api/analytics/roi", response_model=AnalyticsROIReport)
+async def get_roi_endpoint(session: AsyncSession = Depends(get_db_session)):
+    """Retrieve platform profitability, ROI, and tech stack distribution."""
+    return await calculate_roi(session)
+
+
+@app.get("/api/strategy/experiments", response_model=List[ExperimentReport])
+async def list_experiments_endpoint(session: AsyncSession = Depends(get_db_session)):
+    """List active A/B testing experiment evaluations."""
+    proposal_exp = await evaluate_proposal_style_experiment(session)
+    return [proposal_exp]
+
+
+@app.post("/api/strategy/review", response_model=StrategyReviewReport)
+async def trigger_strategy_review_endpoint(session: AsyncSession = Depends(get_db_session)):
+    """Generate strategic intelligence review across platforms and skill niches."""
+    return await generate_strategy_review(session)
+
+
+
 
 
 
